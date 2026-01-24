@@ -347,9 +347,10 @@ show_menu() {
     echo -e "${PURPLE}#          Sing-box + NaiveProxy Ultimate Manager           #${PLAIN}"
     echo -e "${PURPLE}#############################################################${PLAIN}"
     
+    # Display Status
     get_vps_info
     
-    echo -e " Sing-box: ${CURRENT_VER} (Latest: ${LATEST_VER})"
+    echo -e " ${YELLOW}Sing-box Ver:${PLAIN} ${CURRENT_VER} (Latest: ${LATEST_VER})"
     echo ""
     echo -e "${CYAN}--- Management ---${PLAIN}"
     echo -e "${YELLOW}1.${PLAIN} Install / Repair (Force Update)"
