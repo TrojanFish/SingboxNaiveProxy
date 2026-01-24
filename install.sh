@@ -308,7 +308,8 @@ uninstall() {
 get_vps_info() {
     OS=$(grep -w "PRETTY_NAME" /etc/os-release | cut -d '"' -f 2)
     KERNEL=$(uname -r)
-    ARCH=$(uname -m)
+    # Don't overwrite global ARCH variable with raw uname -m
+    RAW_ARCH=$(uname -m)
     IPV4=$(curl -s4 --max-time 2 icanhazip.com || echo "N/A")
     IPV6=$(curl -s6 --max-time 2 icanhazip.com || echo "N/A")
     
@@ -327,7 +328,7 @@ get_vps_info() {
     echo -e "${BLUE}---------------- VPS Status ----------------${PLAIN}"
     echo -e "${YELLOW}System:${PLAIN}   ${OS}"
     echo -e "${YELLOW}Kernel:${PLAIN}   ${KERNEL}"
-    echo -e "${YELLOW}Arch:${PLAIN}     ${ARCH}"
+    echo -e "${YELLOW}Arch:${PLAIN}     ${RAW_ARCH}"
     echo -e "${YELLOW}BBR:${PLAIN}      ${TCP_CC}"
     echo -e "${YELLOW}IPv4:${PLAIN}     ${IPV4}"
     echo -e "${YELLOW}IPv6:${PLAIN}     ${IPV6}"
