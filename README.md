@@ -57,11 +57,38 @@ PassWall 需要您的固件内置了 `naiveproxy` 或者是最新的 `sing-box` 
 
 ---
 
+## 常见问题排查 (Troubleshooting)
+
+如果节点显示延迟为 `-1` 或无法连接，请按以下顺序排查：
+
+1. **域名解析 (Cloudflare)**:
+   - 检查 Cloudflare 的解析记录。
+   - **代理状态** 必须设置为 **仅限 DNS (灰色云朵)**。开启橙色小黄云会导致 NaiveProxy 协议被拦截。
+
+2. **云平台防火墙 (甲骨文/GCP)**:
+   - 确保在云服务商后台的安全组中开放了以下端口：
+     - **TCP 443** (NaiveProxy)
+     - **UDP 12068** (Hysteria2)
+     - **UDP 443** (辅助)
+
+3. **客户端设置 (最常见错误)**:
+   - **协议类型**: 必须选择 `HTTPS`。
+   - **伪装域名 (Host/SNI)**: **请务必留空**，或填写你自己的域名。千万不要填写 `bing.com` 或 `google.com`，这会导致 TLS 证书不匹配报错。
+   - **ALPN**: 手动填写 `h2`。
+
+4. **服务器日志**:
+   - 运行命令查看实时日志：`journalctl -u sing-box -f`
+   - 如果看到 `not CONNECT request`，通常是客户端协议填错或开启了 `bing.com` 伪装。
+
+## 伪装建议 (Masquerading Tips)
+
+- **推荐二级域名**: `api.yourdomain.com`, `cdn.yourdomain.com`, `update.yourdomain.com` 具有更好的迷惑性。
+- **关于伪装**: NaiveProxy 对伪装非常敏感。如果不确定，**保持默认不配置伪装域名** 是最稳妥的选择，它会自动表现为一个正常的 HTTPS 错误页面。
+
 ## 维护命令
 
 - **查看日志**: `journalctl -u sing-box -f`
 - **重启服务**: `systemctl restart sing-box`
-- **停止服务**: `systemctl stop sing-box`
 - **查看状态**: `systemctl status sing-box`
 
 ## GitHub 仓库
