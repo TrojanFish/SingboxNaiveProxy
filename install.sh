@@ -218,7 +218,7 @@ generate_config() {
     [[ -z "$NAIVE_PASS" ]] && NAIVE_PASS=$(openssl rand -hex 8)
     [[ -z "$HY2_PASS" ]] && HY2_PASS=$(openssl rand -hex 12)
     [[ -z "$HY2_PORT" ]] && HY2_PORT=$(shuf -i 15000-60000 -n 1)
-    [[ -z "$HY2_MASK" ]] && HY2_MASK="https://news.yolodoit.com/"
+    [[ -z "$HY2_MASK" ]] && HY2_MASK="https://www.xiaohongshu.com/"
     
     cat > $CONFIG_FILE <<EOF
 {
@@ -436,7 +436,7 @@ modify_masquerade() {
     
     echo -e "${YELLOW}--- Modify Masquerade Domain ---${PLAIN}"
     echo -e "Current: $HY2_MASK"
-    read -p "Enter new masquerade URL (e.g., https://news.yolodoit.com/): " NEW_MASK
+    read -p "Enter new masquerade URL (e.g., https://www.xiaohongshu.com/): " NEW_MASK
     
     [[ -n "$NEW_MASK" ]] && HY2_MASK=$NEW_MASK
     
