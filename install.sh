@@ -265,8 +265,20 @@ generate_config() {
     {
       "type": "direct",
       "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block"
     }
-  ]
+  ],
+  "route": {
+    "rules": [
+      {
+        "inbound": ["naive-in", "hy2-in"],
+        "outbound": "direct"
+      }
+    ]
+  }
 }
 EOF
     chmod 600 $CONFIG_FILE
