@@ -27,8 +27,8 @@ esac
 get_vps_info() {
     IS_BBR=$(sysctl net.ipv4.tcp_congestion_control | awk '{print $3}')
     VIRT=$(systemd-detect-virt)
-    IPV4=$(curl -s4 icanhazip.com || echo "None")
-    IPV6=$(curl -s6 icanhazip.com || echo "None")
+    IPV4=$(curl -s4 --max-time 2 icanhazip.com || echo "None")
+    IPV6=$(curl -s6 --max-time 2 icanhazip.com || echo "None")
     OS=$(grep -w "PRETTY_NAME" /etc/os-release | cut -d '"' -f 2)
     KERNEL=$(uname -r)
     
@@ -55,7 +55,7 @@ get_vps_info() {
 get_latest_version() {
     VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r .tag_name)
     if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
-        VERSION="v1.12.17" # Fallback
+        VERSION="v1.11.0" # Fallback
     fi
     echo $VERSION
 }
@@ -63,13 +63,14 @@ get_latest_version() {
 # Function to get current sing-box version
 get_current_version() {
     if command -v sing-box &> /dev/null; then
-        sing-box version | head -n 1 | awk '{print $3}'
+        V=$(sing-box version | head -n 1 | awk '{print $3}')
+        echo "v${V#v}"
     else
         echo "None"
     fi
 }
 
-# Function to install/update dependencies
+# Function to install dependencies
 install_dependencies() {
     echo -e "${YELLOW}Installing dependencies...${PLAIN}"
     if [[ -f /etc/debian_version ]]; then
@@ -128,10 +129,10 @@ setup_ssl() {
     
     # Check both ECC and RSA paths
     if [[ -f ~/.acme.sh/${DOMAIN}_ecc/fullchain.cer ]] || [[ -f ~/.acme.sh/${DOMAIN}/fullchain.cer ]]; then
-        echo -e "${GREEN}Certificate for ${DOMAIN} already exists, skipping issuance.${PLAIN}"
+        echo -e "${GREEN}Certificate for ${DOMAIN} already exists, continuing...${PLAIN}"
     else
         if ! ~/.acme.sh/acme.sh --issue -d "$DOMAIN" --standalone; then
-            echo -e "${RED}SSL issue failed! Please check if port 80 is open.${PLAIN}"
+            echo -e "${RED}SSL issue failed! Try running 'systemctl stop sing-box && fuser -k 80/tcp' first.${PLAIN}"
             exit 1
         fi
     fi
@@ -144,10 +145,16 @@ setup_ssl() {
 
 # Function to generate config
 generate_config() {
-    USERNAME=$(openssl rand -hex 4)
-    PASSWORD=$(openssl rand -hex 8)
+    if [[ -f /etc/sing-box/config.json ]]; then
+        USERNAME=$(jq -r '.inbounds[0].users[0].username' /etc/sing-box/config.json 2>/dev/null)
+        PASSWORD=$(jq -r '.inbounds[0].users[0].password' /etc/sing-box/config.json 2>/dev/null)
+    fi
+    
+    if [[ -z "$USERNAME" || "$USERNAME" == "null" ]]; then USERNAME=$(openssl rand -hex 4); fi
+    if [[ -z "$PASSWORD" || "$PASSWORD" == "null" ]]; then PASSWORD=$(openssl rand -hex 8); fi
     PORT=443
     
+    # Updated config: removed invalid 'destination' field
     cat > /etc/sing-box/config.json <<EOF
 {
   "log": {
@@ -171,8 +178,7 @@ generate_config() {
         "server_name": "$DOMAIN",
         "certificate_path": "/etc/sing-box/certs/fullchain.pem",
         "key_path": "/etc/sing-box/certs/private.key"
-      },
-      "destination": "www.bing.com:443"
+      }
     }
   ],
   "outbounds": [
@@ -222,7 +228,7 @@ CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
 ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box/config.json
 Restart=on-failure
-RestartSec=18s
+RestartSec=10s
 LimitNOFILE= infinity
 
 [Install]
@@ -232,22 +238,31 @@ EOF
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
-
-    # Add shortcut
-    cp "$0" /usr/local/bin/nb
-    chmod +x /usr/local/bin/nb
+    
+    # shortcut
+    cp "$0" /usr/local/bin/nb 2>/dev/null
+    chmod +x /usr/local/bin/nb 2>/dev/null
 }
 
 # Function to uninstall
 uninstall_singbox() {
-    echo -e "${YELLOW}Uninstalling Sing-box...${PLAIN}"
+    echo -e "${YELLOW}Uninstalling...${PLAIN}"
     systemctl stop sing-box
     systemctl disable sing-box
     rm -f /etc/systemd/system/sing-box.service
     systemctl daemon-reload
     rm -rf /etc/sing-box
     rm -f /usr/local/bin/sing-box
+    rm -f /usr/local/bin/nb
     echo -e "${GREEN}Uninstalled successfully!${PLAIN}"
+}
+
+# Function to check logs
+check_logs() {
+    echo -e "${YELLOW}Last 20 lines of logs:${PLAIN}"
+    journalctl -u sing-box -n 20 --no-pager
+    echo ""
+    read -p "Press Enter to return to menu..."
 }
 
 # Menu
@@ -265,14 +280,15 @@ show_menu() {
     echo -e "Current Version: ${YELLOW}${CURRENT}${PLAIN}"
     echo -e "Latest Version:  ${GREEN}${LATEST}${PLAIN}"
     echo ""
-    echo -e "${YELLOW}1.${PLAIN} Install Sing-box + NaiveProxy"
+    echo -e "${YELLOW}1.${PLAIN} Install / Repair Sing-box"
     echo -e "${YELLOW}2.${PLAIN} Uninstall Sing-box"
     echo -e "${YELLOW}3.${PLAIN} Show Current Config & QR Code"
     echo -e "${YELLOW}4.${PLAIN} Update Sing-box (Manual)"
     echo -e "${YELLOW}5.${PLAIN} Start / Stop / Restart Service"
+    echo -e "${YELLOW}6.${PLAIN} View Runtime Logs"
     echo -e "${YELLOW}0.${PLAIN} Exit"
     echo ""
-    read -p "Please enter a number [0-5]: " choice
+    read -p "Please enter a number [0-6]: " choice
     case $choice in
         1)
             install_dependencies
@@ -282,13 +298,9 @@ show_menu() {
             setup_systemd
             show_config
             ;;
-        2)
-            uninstall_singbox
-            ;;
-        3)
-            show_config
-            ;;
-        4)
+        2) uninstall_singbox ;;
+        3) show_config ;;
+        4) 
             install_singbox
             systemctl restart sing-box
             echo -e "${GREEN}Updated to ${LATEST}!${PLAIN}"
@@ -302,6 +314,7 @@ show_menu() {
                 3) systemctl restart sing-box ;;
             esac
             ;;
+        6) check_logs ;;
         0) exit 0 ;;
         *) echo -e "${RED}Invalid input!${PLAIN}" ;;
     esac
