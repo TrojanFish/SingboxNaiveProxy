@@ -139,6 +139,7 @@ install_singbox() {
     # Move binary and libcronet (required for NaiveProxy)
     cp /tmp/sing-box-*/sing-box "$BIN_PATH"
     if [[ -f /tmp/sing-box-*/libcronet.so ]]; then
+        cp /tmp/sing-box-*/libcronet.so /usr/lib/
         cp /tmp/sing-box-*/libcronet.so /usr/local/bin/
         echo -e "${GREEN}Detected and installed libcronet.so for NaiveProxy support.${PLAIN}"
     fi
@@ -239,7 +240,7 @@ generate_config() {
         "server_name": "$DOMAIN",
         "certificate_path": "/etc/sing-box/certs/fullchain.pem",
         "key_path": "/etc/sing-box/certs/private.key",
-        "alpn": ["h2", "http/1.1"]
+        "alpn": ["h2"]
       }
     },
     {
