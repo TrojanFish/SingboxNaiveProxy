@@ -304,6 +304,37 @@ uninstall() {
     echo -e "${GREEN}Uninstalled successfully!${PLAIN}"
 }
 
+# Get VPS Info
+get_vps_info() {
+    OS=$(grep -w "PRETTY_NAME" /etc/os-release | cut -d '"' -f 2)
+    KERNEL=$(uname -r)
+    ARCH=$(uname -m)
+    IPV4=$(curl -s4 --max-time 2 icanhazip.com || echo "N/A")
+    IPV6=$(curl -s6 --max-time 2 icanhazip.com || echo "N/A")
+    
+    # Check BBR
+    TCP_CC=$(sysctl net.ipv4.tcp_congestion_control | awk '{print $3}')
+    
+    # Check Service
+    if systemctl is-active --quiet sing-box; then
+        STATUS="${GREEN}Running${PLAIN}"
+        PORT=$(jq -r '.inbounds[0].listen_port' $CONFIG_FILE 2>/dev/null || echo "443")
+    else
+        STATUS="${RED}Stopped${PLAIN}"
+        PORT="N/A"
+    fi
+    
+    echo -e "${BLUE}---------------- VPS Status ----------------${PLAIN}"
+    echo -e "${YELLOW}System:${PLAIN}   ${OS}"
+    echo -e "${YELLOW}Kernel:${PLAIN}   ${KERNEL}"
+    echo -e "${YELLOW}Arch:${PLAIN}     ${ARCH}"
+    echo -e "${YELLOW}BBR:${PLAIN}      ${TCP_CC}"
+    echo -e "${YELLOW}IPv4:${PLAIN}     ${IPV4}"
+    echo -e "${YELLOW}IPv6:${PLAIN}     ${IPV6}"
+    echo -e "${YELLOW}Service:${PLAIN}  ${STATUS} (Port: ${PORT})"
+    echo -e "${BLUE}--------------------------------------------${PLAIN}"
+}
+
 # Menu System
 show_menu() {
     clear
@@ -311,16 +342,14 @@ show_menu() {
     # Collect Info
     CURRENT_VER=$(get_current_version)
     LATEST_VER=$(get_latest_version)
-    STATUS="${RED}Stopped${PLAIN}"
-    if systemctl is-active --quiet sing-box; then STATUS="${GREEN}Running${PLAIN}"; fi
-    IPV4=$(curl -s4 --max-time 2 icanhazip.com || echo "Error")
     
     echo -e "${PURPLE}#############################################################${PLAIN}"
     echo -e "${PURPLE}#          Sing-box + NaiveProxy Ultimate Manager           #${PLAIN}"
     echo -e "${PURPLE}#############################################################${PLAIN}"
-    echo -e " VPS IP: ${IPV4}"
-    echo -e " Status: ${STATUS}"
-    echo -e " Ver:    ${CURRENT_VER} (Latest: ${LATEST_VER})"
+    
+    get_vps_info
+    
+    echo -e " Sing-box: ${CURRENT_VER} (Latest: ${LATEST_VER})"
     echo ""
     echo -e "${CYAN}--- Management ---${PLAIN}"
     echo -e "${YELLOW}1.${PLAIN} Install / Repair (Force Update)"
