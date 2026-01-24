@@ -50,35 +50,42 @@ net.ipv4.tcp_slow_start_after_idle=0
 EOF
     sysctl -p /etc/sysctl.d/99-singbox.conf >/dev/null 2>&1
     
-    # Comprehensive Firewall Configuration
+    echo -e "${GREEN}System optimized!${PLAIN}"
+}
+
+# Firewall Configuration
+setup_firewall() {
     echo -e "${YELLOW}Configuring firewalls (ufw/iptables)...${PLAIN}"
+    
+    # Standard ports
     if command -v ufw >/dev/null; then
         ufw allow 80/tcp >/dev/null 2>&1
         ufw allow 443/tcp >/dev/null 2>&1
         ufw allow 443/udp >/dev/null 2>&1
-        # Allow Hy2 port if exists in config
-        if [[ -f $CONFIG_FILE ]]; then
-            HY2_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port // empty' $CONFIG_FILE)
-            [[ -n "$HY2_PORT" ]] && ufw allow $HY2_PORT/udp >/dev/null 2>&1
-        fi
     fi
     
     if command -v iptables >/dev/null; then
         iptables -I INPUT -p tcp --dport 80 -j ACCEPT >/dev/null 2>&1
         iptables -I INPUT -p tcp --dport 443 -j ACCEPT >/dev/null 2>&1
         iptables -I INPUT -p udp --dport 443 -j ACCEPT >/dev/null 2>&1
-        if [[ -f $CONFIG_FILE ]]; then
-            HY2_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port // empty' $CONFIG_FILE)
-            [[ -n "$HY2_PORT" ]] && iptables -I INPUT -p udp --dport $HY2_PORT -j ACCEPT >/dev/null 2>&1
-        fi
-        # Persist iptables
-        if [[ -f /etc/debian_version ]]; then
-            apt-get install -y iptables-persistent >/dev/null 2>&1
-            netfilter-persistent save >/dev/null 2>&1
+    fi
+
+    # Dynamic ports (Hy2)
+    if [[ -f $CONFIG_FILE ]]; then
+        local HY2_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port // empty' $CONFIG_FILE)
+        if [[ -n "$HY2_PORT" ]]; then
+            command -v ufw >/dev/null && ufw allow $HY2_PORT/udp >/dev/null 2>&1
+            command -v iptables >/dev/null && iptables -I INPUT -p udp --dport $HY2_PORT -j ACCEPT >/dev/null 2>&1
         fi
     fi
+
+    # Persist iptables
+    if command -v iptables >/dev/null && [[ -f /etc/debian_version ]]; then
+        apt-get install -y iptables-persistent >/dev/null 2>&1
+        netfilter-persistent save >/dev/null 2>&1
+    fi
     
-    echo -e "${GREEN}System and Firewall optimized!${PLAIN}"
+    echo -e "${GREEN}Firewall configured!${PLAIN}"
 }
 
 # Install Dependencies
@@ -128,7 +135,14 @@ install_singbox() {
     fi
     
     tar -zxvf /tmp/sing-box.tar.gz -C /tmp >/dev/null
-    mv /tmp/sing-box-*/sing-box "$BIN_PATH"
+    
+    # Move binary and libcronet (required for NaiveProxy)
+    cp /tmp/sing-box-*/sing-box "$BIN_PATH"
+    if [[ -f /tmp/sing-box-*/libcronet.so ]]; then
+        cp /tmp/sing-box-*/libcronet.so /usr/local/bin/
+        echo -e "${GREEN}Detected and installed libcronet.so for NaiveProxy support.${PLAIN}"
+    fi
+
     chmod +x "$BIN_PATH"
     
     mkdir -p /etc/sing-box
@@ -224,7 +238,8 @@ generate_config() {
         "enabled": true,
         "server_name": "$DOMAIN",
         "certificate_path": "/etc/sing-box/certs/fullchain.pem",
-        "key_path": "/etc/sing-box/certs/private.key"
+        "key_path": "/etc/sing-box/certs/private.key",
+        "alpn": ["h2", "http/1.1"]
       }
     },
     {
@@ -376,7 +391,7 @@ show_menu() {
     echo ""
     read -p "Choose an option [0-6]: " choice
     case $choice in
-        1) optimize_system; install_dependencies; install_singbox; setup_ssl; generate_config; setup_systemd; show_config ;;
+        1) optimize_system; install_dependencies; install_singbox; setup_ssl; generate_config; setup_firewall; setup_systemd; show_config ;;
         2) show_config ;;
         3) systemctl restart sing-box; echo -e "${GREEN}Service restarted!${PLAIN}"; sleep 1; show_menu ;;
         4) journalctl -u sing-box -n 20 --no-pager; read -p "Press Enter to return..."; show_menu ;;
