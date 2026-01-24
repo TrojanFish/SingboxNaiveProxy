@@ -171,7 +171,8 @@ generate_config() {
         "server_name": "$DOMAIN",
         "certificate_path": "/etc/sing-box/certs/fullchain.pem",
         "key_path": "/etc/sing-box/certs/private.key"
-      }
+      },
+      "destination": "www.bing.com:443"
     }
   ],
   "outbounds": [
