@@ -211,12 +211,14 @@ generate_config() {
         NAIVE_PASS=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].password // empty' $CONFIG_FILE)
         HY2_PASS=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .users[0].password // empty' $CONFIG_FILE)
         HY2_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port // empty' $CONFIG_FILE)
+        HY2_MASK=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .masquerade // empty' $CONFIG_FILE)
     fi
     
     [[ -z "$NAIVE_USER" ]] && NAIVE_USER=$(openssl rand -hex 4)
     [[ -z "$NAIVE_PASS" ]] && NAIVE_PASS=$(openssl rand -hex 8)
     [[ -z "$HY2_PASS" ]] && HY2_PASS=$(openssl rand -hex 12)
     [[ -z "$HY2_PORT" ]] && HY2_PORT=$(shuf -i 15000-60000 -n 1)
+    [[ -z "$HY2_MASK" ]] && HY2_MASK="https://news.yolodoit.com/"
     
     cat > $CONFIG_FILE <<EOF
 {
@@ -258,7 +260,9 @@ generate_config() {
         "server_name": "$DOMAIN",
         "certificate_path": "/etc/sing-box/certs/fullchain.pem",
         "key_path": "/etc/sing-box/certs/private.key"
-      }
+      },
+      "ignore_client_bandwidth": true,
+      "masquerade": "$HY2_MASK"
     }
   ],
   "outbounds": [
@@ -388,9 +392,11 @@ show_menu() {
     echo -e "${YELLOW}4.${PLAIN} View Runtime Logs (20 lines)"
     echo -e "${YELLOW}5.${PLAIN} Enable BBR & Net Optimization"
     echo -e "${YELLOW}6.${PLAIN} Uninstall"
+    echo -e "${YELLOW}7.${PLAIN} Modify Credentials (Users/Pass)"
+    echo -e "${YELLOW}8.${PLAIN} Modify Masquerade Domain"
     echo -e "${YELLOW}0.${PLAIN} Exit"
     echo ""
-    read -p "Choose an option [0-6]: " choice
+    read -p "Choose an option [0-8]: " choice
     case $choice in
         1) optimize_system; install_dependencies; install_singbox; setup_ssl; generate_config; setup_firewall; setup_systemd; show_config ;;
         2) show_config ;;
@@ -398,8 +404,47 @@ show_menu() {
         4) journalctl -u sing-box -n 20 --no-pager; read -p "Press Enter to return..."; show_menu ;;
         5) optimize_system; read -p "Optimization complete! Press Enter..."; show_menu ;;
         6) uninstall ;;
+        7) modify_credentials ;;
+        8) modify_masquerade ;;
         *) exit 0 ;;
     esac
+}
+
+# ----------------- Modification Functions -----------------
+
+modify_credentials() {
+    [[ ! -f $CONFIG_FILE ]] && echo -e "${RED}Error: Config file not found!${PLAIN}" && return
+    
+    echo -e "${YELLOW}--- Modify Credentials ---${PLAIN}"
+    read -p "Enter NaiveProxy Username (current: $NAIVE_USER): " NEW_N_USER
+    read -p "Enter NaiveProxy Password (current: $NAIVE_PASS): " NEW_N_PASS
+    read -p "Enter Hysteria2 Password (current: $HY2_PASS): " NEW_H_PASS
+    
+    [[ -n "$NEW_N_USER" ]] && NAIVE_USER=$NEW_N_USER
+    [[ -n "$NEW_N_PASS" ]] && NAIVE_PASS=$NEW_N_PASS
+    [[ -n "$NEW_H_PASS" ]] && HY2_PASS=$NEW_H_PASS
+    
+    generate_config
+    systemctl restart sing-box
+    echo -e "${GREEN}Credentials updated and service restarted!${PLAIN}"
+    sleep 2
+    show_menu
+}
+
+modify_masquerade() {
+    [[ ! -f $CONFIG_FILE ]] && echo -e "${RED}Error: Config file not found!${PLAIN}" && return
+    
+    echo -e "${YELLOW}--- Modify Masquerade Domain ---${PLAIN}"
+    echo -e "Current: $HY2_MASK"
+    read -p "Enter new masquerade URL (e.g., https://news.yolodoit.com/): " NEW_MASK
+    
+    [[ -n "$NEW_MASK" ]] && HY2_MASK=$NEW_MASK
+    
+    generate_config
+    systemctl restart sing-box
+    echo -e "${GREEN}Masquerade domain updated and service restarted!${PLAIN}"
+    sleep 2
+    show_menu
 }
 
 # Start
