@@ -82,8 +82,11 @@ setup_ssl() {
         ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
     fi
     
-    # Check if certificate already exists and is valid
-    if [[ -f ~/.acme.sh/${DOMAIN}_ecc/fullchain.cer ]]; then
+    # Stop existing sing-box to free ports
+    systemctl stop sing-box 2>/dev/null
+    
+    # Check both ECC and RSA paths
+    if [[ -f ~/.acme.sh/${DOMAIN}_ecc/fullchain.cer ]] || [[ -f ~/.acme.sh/${DOMAIN}/fullchain.cer ]]; then
         echo -e "${GREEN}Certificate for ${DOMAIN} already exists, skipping issuance.${PLAIN}"
     else
         if ! ~/.acme.sh/acme.sh --issue -d "$DOMAIN" --standalone; then
