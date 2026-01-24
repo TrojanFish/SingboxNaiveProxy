@@ -26,9 +26,14 @@ install_dependencies() {
     echo -e "${YELLOW}Installing dependencies...${PLAIN}"
     if [[ -f /etc/debian_version ]]; then
         apt-get update
-        apt-get install -y curl wget jq tar openssl socat
+        apt-get install -y curl wget jq tar openssl socat qrencode
     elif [[ -f /etc/redhat-release ]]; then
         yum install -y curl wget jq tar openssl socat
+        # Install qrencode for CentOS
+        if ! command -v qrencode &> /dev/null; then
+            yum install -y epel-release
+            yum install -y qrencode
+        fi
     else
         echo -e "${RED}Unsupported OS!${PLAIN}"
         exit 1
@@ -129,14 +134,25 @@ generate_config() {
 }
 EOF
     
+    # Generate Links
+    # NaiveProxy URL format: https://user:pass@host:port
+    NAIVE_URL="https://${USERNAME}:${PASSWORD}@${DOMAIN}:${PORT}?padding=true#Naive_${DOMAIN}"
+    
     echo -e "${GREEN}Config generated successfully!${PLAIN}"
     echo -e "${YELLOW}--- Client Configuration Info ---${PLAIN}"
-    echo -e "Domain: ${DOMAIN}"
-    echo -e "Port: ${PORT}"
+    echo -e "Domain:   ${DOMAIN}"
+    echo -e "Port:     ${PORT}"
     echo -e "Username: ${USERNAME}"
     echo -e "Password: ${PASSWORD}"
     echo -e "Protocol: naive"
     echo -e "----------------------------------"
+    echo ""
+    echo -e "${YELLOW}--- Client Import Link ---${PLAIN}"
+    echo -e "${NAIVE_URL}"
+    echo ""
+    echo -e "${YELLOW}--- Scan for Shadowrocket (Scan the QR Code below) ---${PLAIN}"
+    qrencode -t ansiutf8 "${NAIVE_URL}"
+    echo ""
 }
 
 # Function to setup systemd
