@@ -219,15 +219,20 @@ show_config() {
     PORT=$(jq -r '.inbounds[0].listen_port' /etc/sing-box/config.json)
     
     URL="https://${USERNAME}:${PASSWORD}@${DOMAIN}:${PORT}?padding=true#Naive_${DOMAIN}"
+    URL_NAIVE="naive+https://${USERNAME}:${PASSWORD}@${DOMAIN}:${PORT}?padding=true#Naive_${DOMAIN}"
     
     echo -e "${GREEN}--- Current Configuration ---${PLAIN}"
     echo -e "Domain:   ${DOMAIN}"
     echo -e "Port:     ${PORT}"
     echo -e "Username: ${USERNAME}"
     echo -e "Password: ${PASSWORD}"
-    echo -e "Link:     ${URL}"
-    echo -e "${YELLOW}Scan for Shadowrocket:${PLAIN}"
-    qrencode -t ansiutf8 "${URL}"
+    echo ""
+    echo -e "${YELLOW}--- Import Links ---${PLAIN}"
+    echo -e "Standard/v2rayN: ${URL}"
+    echo -e "Shadowrocket:    ${URL_NAIVE}"
+    echo ""
+    echo -e "${YELLOW}Scan for Shadowrocket / v2rayN (If available):${PLAIN}"
+    qrencode -t ansiutf8 "${URL_NAIVE}"
 }
 
 # Function to setup systemd
