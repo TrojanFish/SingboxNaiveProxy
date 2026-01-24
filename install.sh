@@ -232,6 +232,10 @@ EOF
     systemctl daemon-reload
     systemctl enable sing-box
     systemctl start sing-box
+
+    # Add shortcut
+    cp "$0" /usr/local/bin/nb
+    chmod +x /usr/local/bin/nb
 }
 
 # Function to uninstall
