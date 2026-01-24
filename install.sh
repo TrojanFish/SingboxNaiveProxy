@@ -70,10 +70,12 @@ setup_ssl() {
         exit 1
     fi
 
-    curl https://get.acme.sh | sh -s email=admin@$DOMAIN
-    source ~/.bashrc
-    ~/.acme.sh/acme.sh --upgrade --auto-upgrade
-    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+    if [[ ! -f ~/.acme.sh/acme.sh ]]; then
+        curl https://get.acme.sh | sh -s email=admin@$DOMAIN
+        source ~/.bashrc
+        ~/.acme.sh/acme.sh --upgrade --auto-upgrade
+        ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+    fi
     
     if ! ~/.acme.sh/acme.sh --issue -d "$DOMAIN" --standalone; then
         echo -e "${RED}SSL issue failed! Please check if port 80 is open and domain is pointing to this IP.${PLAIN}"
@@ -163,11 +165,53 @@ EOF
     echo -e "${GREEN}Sing-box service started!${PLAIN}"
 }
 
-# Main process
-install_dependencies
-install_singbox
-setup_ssl
-generate_config
-setup_systemd
+# Function to uninstall
+uninstall_singbox() {
+    echo -e "${YELLOW}Uninstalling Sing-box...${PLAIN}"
+    systemctl stop sing-box
+    systemctl disable sing-box
+    rm -f /etc/systemd/system/sing-box.service
+    systemctl daemon-reload
+    
+    rm -rf /etc/sing-box
+    rm -f /usr/local/bin/sing-box
+    
+    echo -e "${GREEN}Sing-box has been successfully uninstalled!${PLAIN}"
+}
 
-echo -e "${GREEN}Deployment completed!${PLAIN}"
+# Menu
+show_menu() {
+    clear
+    echo -e "${GREEN}#############################################################${PLAIN}"
+    echo -e "${GREEN}#                                                           #${PLAIN}"
+    echo -e "${GREEN}#          Sing-box + NaiveProxy Auto Deployment            #${PLAIN}"
+    echo -e "${GREEN}#                                                           #${PLAIN}"
+    echo -e "${GREEN}#############################################################${PLAIN}"
+    echo ""
+    echo -e "${YELLOW}1.${PLAIN} Install Sing-box + NaiveProxy"
+    echo -e "${YELLOW}2.${PLAIN} Uninstall Sing-box"
+    echo -e "${YELLOW}0.${PLAIN} Exit"
+    echo ""
+    read -p "Please enter a number [0-2]: " choice
+    case $choice in
+        1)
+            install_dependencies
+            install_singbox
+            setup_ssl
+            generate_config
+            setup_systemd
+            echo -e "${GREEN}Deployment completed!${PLAIN}"
+            ;;
+        2)
+            uninstall_singbox
+            ;;
+        0)
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Invalid input!${PLAIN}"
+            ;;
+    esac
+}
+
+show_menu

@@ -9,13 +9,18 @@
 - 自动配置 Systemd 服务，确保开机自启。
 - 生成随机的用户名和密码。
 
-## 快速安装
+## 快速安装与管理
 
-在您的 VPS 上运行以下命令：
+在您的 VPS 上运行以下命令，即可进入交互式菜单进行安装或卸载：
 
 ```bash
 wget -N --no-check-certificate https://raw.githubusercontent.com/TrojanFish/SingboxNaiveProxy/main/install.sh && chmod +x install.sh && ./install.sh
 ```
+
+### 菜单选项
+1. **安装 Sing-box + NaiveProxy**: 自动化完成所有配置。
+2. **一键删除 (卸载)**: 停止服务并清理所有配置文件和二进制文件。
+0. **退出**: 退出脚本。
 
 > 注意：请确保您的域名已解析到当前 VPS 的 IP，并且端口 80 和 443 是开放的。
 
