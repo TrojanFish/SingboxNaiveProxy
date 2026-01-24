@@ -140,8 +140,9 @@ install_singbox() {
     cp /tmp/sing-box-*/sing-box "$BIN_PATH"
     if [[ -f /tmp/sing-box-*/libcronet.so ]]; then
         cp /tmp/sing-box-*/libcronet.so /usr/lib/
-        cp /tmp/sing-box-*/libcronet.so /usr/local/bin/
-        echo -e "${GREEN}Detected and installed libcronet.so for NaiveProxy support.${PLAIN}"
+        cp /tmp/sing-box-*/libcronet.so /usr/local/lib/
+        ldconfig
+        echo -e "${GREEN}Detected and installed libcronet.so to system paths.${PLAIN}"
     fi
 
     chmod +x "$BIN_PATH"
@@ -333,6 +334,7 @@ After=network.target nss-lookup.target
 [Service]
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+Environment=LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
 ExecStart=$BIN_PATH run -c $CONFIG_FILE
 Restart=always
 RestartSec=5
