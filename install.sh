@@ -35,7 +35,8 @@ detect_arch
 optimize_system() {
     echo -e "${YELLOW}Optimizing system parameters and enabling BBR...${PLAIN}"
     
-    cat > /etc/sysctl.d/99-singbox-vps.conf <<EOF
+    # Enable BBR using sysctl.d to avoid polluting main config
+    cat > /etc/sysctl.d/99-singbox-bbr.conf <<EOF
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
 net.ipv4.ip_forward=1
@@ -45,9 +46,9 @@ net.ipv4.tcp_rmem=4096 87380 67108864
 net.ipv4.tcp_wmem=4096 65536 67108864
 net.ipv4.tcp_slow_start_after_idle=0
 EOF
-    sysctl -p /etc/sysctl.d/99-singbox-vps.conf >/dev/null 2>&1
+    sysctl -p /etc/sysctl.d/99-singbox-bbr.conf >/dev/null 2>&1
     
-    # Firewall
+    # Configure Firewall (Basic)
     if command -v ufw >/dev/null; then
         ufw allow 80/tcp >/dev/null 2>&1
         ufw allow 443/tcp >/dev/null 2>&1
@@ -57,7 +58,7 @@ EOF
         iptables -I INPUT -p tcp --dport 80 -j ACCEPT >/dev/null 2>&1
         iptables -I INPUT -p tcp --dport 443 -j ACCEPT >/dev/null 2>&1
         iptables -I INPUT -p udp --dport 443 -j ACCEPT >/dev/null 2>&1
-        iptables -I INPUT -p udp --dport 10000:65535 -j ACCEPT >/dev/null 2>&1 # For Hy2 ports
+        iptables -I INPUT -p udp --dport 10000:65535 -j ACCEPT >/dev/null 2>&1
         # Try to persist
         if command -v netfilter-persistent >/dev/null; then
             netfilter-persistent save >/dev/null 2>&1
@@ -82,16 +83,19 @@ install_dependencies() {
     fi
 }
 
-# Version Control
+# Get Version Info
 get_latest_version() {
     local VERSION=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r .tag_name)
-    [[ -z "$VERSION" || "$VERSION" == "null" ]] && VERSION="v1.12.17"
+    if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+        VERSION="v1.12.17" # Stable fallback
+    fi
     echo $VERSION
 }
 
 get_current_version() {
     if command -v sing-box &> /dev/null; then
-        sing-box version | head -n 1 | awk '{print $3}'
+        V=$(sing-box version | head -n 1 | awk '{print $3}')
+        echo "${V}"
     else
         echo "None"
     fi
@@ -106,7 +110,10 @@ install_singbox() {
     URL="https://github.com/SagerNet/sing-box/releases/download/${LATEST}/${FILENAME}"
     
     wget -O /tmp/sing-box.tar.gz "$URL"
-    [[ $? -ne 0 ]] && echo -e "${RED}Download failed!${PLAIN}" && exit 1
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}Download failed! Check your network.${PLAIN}"
+        exit 1
+    fi
     
     tar -zxvf /tmp/sing-box.tar.gz -C /tmp >/dev/null
     mv /tmp/sing-box-*/sing-box "$BIN_PATH"
@@ -120,6 +127,7 @@ install_singbox() {
 setup_ssl() {
     echo -e "${YELLOW}Configuring SSL...${PLAIN}"
     
+    # Try to reuse existing valid domain
     if [[ -f $CONFIG_FILE ]]; then
         DOMAIN=$(jq -r '.inbounds[0].tls.server_name // empty' $CONFIG_FILE)
     fi
@@ -128,7 +136,9 @@ setup_ssl() {
         read -p "Enter your domain: " DOMAIN
     else
         read -p "Use existing domain $DOMAIN? [y/N] " USE_EXIST
-        [[ ! "$USE_EXIST" =~ ^[Yy]$ || -z "$USE_EXIST" ]] && read -p "Enter new domain: " DOMAIN
+        if [[ ! "$USE_EXIST" =~ ^[Yy]$ ]]; then
+            read -p "Enter new domain: " DOMAIN
+        fi
     fi
 
     if [[ -z "$DOMAIN" ]]; then
@@ -136,36 +146,42 @@ setup_ssl() {
         exit 1
     fi
 
-    echo -e "${CYAN}Cleaning port 80...${PLAIN}"
+    echo -e "${CYAN}Stopping conflicting services to free port 80...${PLAIN}"
     systemctl stop sing-box 2>/dev/null
     systemctl stop nginx 2>/dev/null
     
+    # Install acme.sh if missing
     if [[ ! -f ~/.acme.sh/acme.sh ]]; then
         curl https://get.acme.sh | sh -s email=admin@$DOMAIN
         source ~/.bashrc
     fi
     
+    # Issue Checks
     ACME_BIN=~/.acme.sh/acme.sh
-    if [[ ! -f ~/.acme.sh/${DOMAIN}_ecc/fullchain.cer ]] && [[ ! -f ~/.acme.sh/${DOMAIN}/fullchain.cer ]]; then
+    if [[ -f ~/.acme.sh/${DOMAIN}_ecc/fullchain.cer ]] || [[ -f ~/.acme.sh/${DOMAIN}/fullchain.cer ]]; then
+        echo -e "${GREEN}Valid certificate found, skipping issuance.${PLAIN}"
+    else
         if ! $ACME_BIN --issue -d "$DOMAIN" --standalone --force; then
-            echo -e "${RED}SSL failed! Check port 80.${PLAIN}"
+            echo -e "${RED}SSL issuance failed! Check if port 80 is open and domain $DOMAIN resolves to $(curl -s4 icanhazip.com).${PLAIN}"
             exit 1
         fi
-    else
-        echo -e "${GREEN}Using existing certificate...${PLAIN}"
     fi
     
     mkdir -p /etc/sing-box/certs
     $ACME_BIN --install-cert -d "$DOMAIN" \
         --fullchain-file /etc/sing-box/certs/fullchain.pem \
-        --key-file /etc/sing-box/certs/private.key
+        --key-file /etc/sing-box/certs/private.key \
+        --reloadcmd "systemctl restart sing-box" >> /dev/null 2>&1
+        
+    chmod 644 /etc/sing-box/certs/fullchain.pem
+    chmod 644 /etc/sing-box/certs/private.key
 }
 
-# Generate Config (Naive + Hysteria2)
+# Generate Config
 generate_config() {
     echo -e "${YELLOW}Generating configuration...${PLAIN}"
     
-    # Credentials
+    # Preserve credentials if exist
     if [[ -f $CONFIG_FILE ]]; then
         NAIVE_USER=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].username // empty' $CONFIG_FILE)
         NAIVE_PASS=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].password // empty' $CONFIG_FILE)
@@ -176,7 +192,7 @@ generate_config() {
     [[ -z "$NAIVE_USER" ]] && NAIVE_USER=$(openssl rand -hex 4)
     [[ -z "$NAIVE_PASS" ]] && NAIVE_PASS=$(openssl rand -hex 8)
     [[ -z "$HY2_PASS" ]] && HY2_PASS=$(openssl rand -hex 8)
-    [[ -z "$HY2_PORT" ]] && HY2_PORT=$(shuf -i 10000-65000 -n 1)
+    [[ -z "$HY2_PORT" ]] && HY2_PORT=$(shuf -i 10000-60000 -n 1)
     
     cat > $CONFIG_FILE <<EOF
 {
@@ -229,51 +245,20 @@ generate_config() {
   ]
 }
 EOF
+    chmod 600 $CONFIG_FILE
 }
 
-# Display Info
-show_config() {
-    [[ ! -f $CONFIG_FILE ]] && echo -e "${RED}No config!${PLAIN}" && return
-    
-    DOMAIN=$(jq -r '.inbounds[] | select(.type=="naive") | .tls.server_name' $CONFIG_FILE)
-    NAIVE_USER=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].username' $CONFIG_FILE)
-    NAIVE_PASS=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].password' $CONFIG_FILE)
-    
-    HY2_PASS=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .users[0].password' $CONFIG_FILE)
-    HY2_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port' $CONFIG_FILE)
-    
-    # Links
-    LINK_NAIVE="naive+https://${NAIVE_USER}:${NAIVE_PASS}@${DOMAIN}:443?padding=true#Naive_${DOMAIN}"
-    LINK_HY2="hysteria2://${HY2_PASS}@${DOMAIN}:${HY2_PORT}/?sni=${DOMAIN}&insecure=0#Hy2_${DOMAIN}"
-    
-    clear
-    echo -e "${BLUE}================ Configuration Info ================${PLAIN}"
-    echo -e "${YELLOW}Domain:${PLAIN}   $DOMAIN"
-    echo ""
-    echo -e "${GREEN}1. NaiveProxy${PLAIN}"
-    echo -e "   Port: 443 | User: $NAIVE_USER | Pass: $NAIVE_PASS"
-    echo -e "   Link: ${CYAN}${LINK_NAIVE}${PLAIN}"
-    echo ""
-    echo -e "${GREEN}2. Hysteria2${PLAIN}"
-    echo -e "   Port: $HY2_PORT | Pass: $HY2_PASS"
-    echo -e "   Link: ${CYAN}${LINK_HY2}${PLAIN}"
-    echo -e "${BLUE}====================================================${PLAIN}"
-    echo ""
-    echo -e "${YELLOW}Scan for NaiveProxy:${PLAIN}"
-    qrencode -t ansiutf8 "${LINK_NAIVE}"
-    echo ""
-    echo -e "${YELLOW}Scan for Hysteria2:${PLAIN}"
-    qrencode -t ansiutf8 "${LINK_HY2}"
-}
-
-# Others
+# Systemd Service
 setup_systemd() {
     cat > $SERVICE_FILE <<EOF
 [Unit]
 Description=Sing-box Service
+Documentation=https://sing-box.sagernet.org
 After=network.target nss-lookup.target
 
 [Service]
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
 ExecStart=$BIN_PATH run -c $CONFIG_FILE
 Restart=always
 RestartSec=10
@@ -282,56 +267,138 @@ LimitNOFILE=infinity
 [Install]
 WantedBy=multi-user.target
 EOF
+
     systemctl daemon-reload
     systemctl enable sing-box >/dev/null
     systemctl restart sing-box
-    cp "$0" $SHORTCUT_BIN && chmod +x $SHORTCUT_BIN
+    
+    # Create Shortcut
+    cp "$0" $SHORTCUT_BIN 2>/dev/null
+    chmod +x $SHORTCUT_BIN
 }
 
+# Display Info (QR & Links)
+show_config() {
+    if [[ ! -f $CONFIG_FILE ]]; then
+        echo -e "${RED}Config not found!${PLAIN}"
+        return
+    fi
+    
+    DOMAIN=$(jq -r '.inbounds[] | select(.type=="naive") | .tls.server_name' $CONFIG_FILE)
+    NAIVE_USER=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].username' $CONFIG_FILE)
+    NAIVE_PASS=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].password' $CONFIG_FILE)
+    
+    HY2_PASS=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .users[0].password' $CONFIG_FILE)
+    HY2_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port' $CONFIG_FILE)
+    
+    URL_NAIVE_STD="https://${NAIVE_USER}:${NAIVE_PASS}@${DOMAIN}:443?padding=true#Naive_${DOMAIN}"
+    URL_NAIVE_ROCKET="naive+https://${NAIVE_USER}:${NAIVE_PASS}@${DOMAIN}:443?padding=true#Naive_${DOMAIN}"
+    URL_HY2="hysteria2://${HY2_PASS}@${DOMAIN}:${HY2_PORT}/?sni=${DOMAIN}&insecure=0#Hy2_${DOMAIN}"
+    
+    clear
+    echo -e "${BLUE}================ Client Configuration ================${PLAIN}"
+    echo -e "${YELLOW}Host/SNI:${PLAIN} ${DOMAIN}"
+    echo -e "${BLUE}------------------------------------------------------${PLAIN}"
+    echo -e "${GREEN}[1] NaiveProxy${PLAIN}"
+    echo -e "Port: 443 | User: $NAIVE_USER | Pass: $NAIVE_PASS"
+    echo -e "Link (v2rayN): ${CYAN}${URL_NAIVE_STD}${PLAIN}"
+    echo -e "Link (Rocket): ${CYAN}${URL_NAIVE_ROCKET}${PLAIN}"
+    echo ""
+    echo -e "${GREEN}[2] Hysteria2${PLAIN}"
+    echo -e "Port: $HY2_PORT | Pass: $HY2_PASS"
+    echo -e "Link: ${CYAN}${URL_HY2}${PLAIN}"
+    echo -e "${BLUE}======================================================${PLAIN}"
+    echo ""
+    echo -e "${YELLOW}Scan QR Code for NaiveProxy (Rocket):${PLAIN}"
+    qrencode -t ansiutf8 "${URL_NAIVE_ROCKET}"
+    echo ""
+    echo -e "${YELLOW}Scan QR Code for Hysteria2:${PLAIN}"
+    qrencode -t ansiutf8 "${URL_HY2}"
+}
+
+# Uninstall
 uninstall() {
-    systemctl stop sing-box && systemctl disable sing-box
-    rm -f $SERVICE_FILE $BIN_PATH $SHORTCUT_BIN /etc/sysctl.d/99-singbox-vps.conf
+    echo -e "${RED}Uninstalling Sing-box...${PLAIN}"
+    systemctl stop sing-box
+    systemctl disable sing-box
+    rm -f $SERVICE_FILE
+    systemctl daemon-reload
     rm -rf /etc/sing-box
-    echo -e "${GREEN}Uninstalled!${PLAIN}"
+    rm -f $BIN_PATH
+    rm -f $SHORTCUT_BIN
+    rm -f /etc/sysctl.d/99-singbox-bbr.conf
+    echo -e "${GREEN}Uninstalled successfully!${PLAIN}"
 }
 
 # Get VPS Status
-get_vps_status() {
+get_vps_info() {
     OS=$(grep -w "PRETTY_NAME" /etc/os-release | cut -d '"' -f 2)
+    KERNEL=$(uname -r)
+    RAW_ARCH=$(uname -m)
+    IPV4=$(curl -s4 --max-time 2 icanhazip.com || echo "N/A")
+    IPV6=$(curl -s6 --max-time 2 icanhazip.com || echo "N/A")
     TCP_CC=$(sysctl net.ipv4.tcp_congestion_control | awk '{print $3}')
-    IP=$(curl -s4 --max-time 2 icanhazip.com || echo "N/A")
-    ST="${RED}Stopped${PLAIN}"
-    systemctl is-active --quiet sing-box && ST="${GREEN}Running${PLAIN}"
     
-    echo -e "${BLUE}--- VPS Status ---${PLAIN}"
-    echo -e "OS:     $OS"
-    echo -e "IP:     $IP"
-    echo -e "BBR:    $TCP_CC"
-    echo -e "Status: $ST"
-    echo -e "${BLUE}------------------${PLAIN}"
+    STATUS="${RED}Stopped${PLAIN}"
+    [[ $(systemctl is-active sing-box) == "active" ]] && STATUS="${GREEN}Running${PLAIN}"
+    
+    echo -e "${BLUE}---------------- VPS Status ----------------${PLAIN}"
+    echo -e "${YELLOW}System:${PLAIN}   ${OS}"
+    echo -e "${YELLOW}Kernel:${PLAIN}   ${KERNEL}"
+    echo -e "${YELLOW}Arch:${PLAIN}     ${RAW_ARCH}"
+    echo -e "${YELLOW}BBR:${PLAIN}      ${TCP_CC}"
+    echo -e "${YELLOW}IPv4:${PLAIN}     ${IPV4}"
+    echo -e "${YELLOW}IPv6:${PLAIN}     ${IPV6}"
+    echo -e "${YELLOW}Service:${PLAIN}  ${STATUS}"
+    echo -e "${BLUE}--------------------------------------------${PLAIN}"
 }
 
-# Menu
+# Menu System
 show_menu() {
     clear
-    get_vps_status
-    echo -e "${CYAN}--- Management ---${PLAIN}"
-    echo -e "1. Install / Repair (Naive + Hy2)"
-    echo -e "2. Show Links & QR Codes"
-    echo -e "3. Restart Service"
-    echo -e "4. View Logs"
-    echo -e "5. Uninstall"
-    echo -e "0. Exit"
+    CURRENT_VER=$(get_current_version)
+    LATEST_VER=$(get_latest_version)
+    
+    echo -e "${PURPLE}#############################################################${PLAIN}"
+    echo -e "${PURPLE}#          Sing-box + NaiveProxy Ultimate Manager           #${PLAIN}"
+    echo -e "${PURPLE}#############################################################${PLAIN}"
+    
+    get_vps_info
+    
+    echo -e " ${YELLOW}Sing-box Ver:${PLAIN} ${CURRENT_VER} (Latest: ${LATEST_VER})"
     echo ""
-    read -p "Select: " choice
+    echo -e "${CYAN}--- Management ---${PLAIN}"
+    echo -e "${YELLOW}1.${PLAIN} Install / Repair (Naive + Hy2)"
+    echo -e "${YELLOW}2.${PLAIN} View Config & QR Code"
+    echo -e "${YELLOW}3.${PLAIN} Restart Service"
+    echo -e "${YELLOW}4.${PLAIN} View Runtime Logs"
+    echo ""
+    echo -e "${CYAN}--- System ---${PLAIN}"
+    echo -e "${YELLOW}5.${PLAIN} Enable BBR Acceleration"
+    echo -e "${YELLOW}6.${PLAIN} Uninstall"
+    echo -e "${YELLOW}0.${PLAIN} Exit"
+    echo ""
+    
+    read -p "Select [0-6]: " choice
     case $choice in
         1) optimize_system; install_dependencies; install_singbox; setup_ssl; generate_config; setup_systemd; show_config ;;
         2) show_config ;;
-        3) systemctl restart sing-box; echo "Restarted!" ;;
-        4) journalctl -u sing-box -n 50 --no-pager; read -p "Enter to return..." ;;
-        5) uninstall ;;
-        *) exit 0 ;;
+        3) systemctl restart sing-box; echo -e "${GREEN}Service restarted!${PLAIN}"; sleep 1; show_menu ;;
+        4) journalctl -u sing-box -n 50 --no-pager; read -p "Press Enter to return..."; show_menu ;;
+        5) optimize_system; read -p "Press Enter to return..."; show_menu ;;
+        6) uninstall ;;
+        0) exit 0 ;;
+        *) show_menu ;;
     esac
 }
 
-show_menu
+# Entry Point
+if [[ $# > 0 ]]; then
+    case $1 in
+        install) optimize_system; install_dependencies; install_singbox; setup_ssl; generate_config; setup_systemd ;;
+        uninstall) uninstall ;;
+        *) echo "Usage: $0 [install|uninstall]" ;;
+    esac
+else
+    show_menu
+fi
