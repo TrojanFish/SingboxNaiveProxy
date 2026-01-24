@@ -70,6 +70,21 @@ get_current_version() {
     fi
 }
 
+# Function to enable BBR
+enable_bbr() {
+    echo -e "${YELLOW}Optimizing network with BBR...${PLAIN}"
+    if [[ $(sysctl net.ipv4.tcp_congestion_control | awk '{print $3}') == "bbr" ]]; then
+        echo -e "${GREEN}BBR is already enabled.${PLAIN}"
+    else
+        sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf
+        sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf
+        echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
+        echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+        sysctl -p
+        echo -e "${GREEN}BBR enabled successfully!${PLAIN}"
+    fi
+}
+
 # Function to install dependencies
 install_dependencies() {
     echo -e "${YELLOW}Installing dependencies...${PLAIN}"
@@ -291,6 +306,7 @@ show_menu() {
     read -p "Please enter a number [0-6]: " choice
     case $choice in
         1)
+            enable_bbr
             install_dependencies
             setup_ssl
             install_singbox
