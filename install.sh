@@ -240,8 +240,7 @@ generate_config() {
         "enabled": true,
         "server_name": "$DOMAIN",
         "certificate_path": "/etc/sing-box/certs/fullchain.pem",
-        "key_path": "/etc/sing-box/certs/private.key",
-        "alpn": ["h2"]
+        "key_path": "/etc/sing-box/certs/private.key"
       }
     },
     {
@@ -259,28 +258,15 @@ generate_config() {
         "server_name": "$DOMAIN",
         "certificate_path": "/etc/sing-box/certs/fullchain.pem",
         "key_path": "/etc/sing-box/certs/private.key"
-      },
-      "ignore_client_bandwidth": true
+      }
     }
   ],
   "outbounds": [
     {
       "type": "direct",
       "tag": "direct"
-    },
-    {
-      "type": "block",
-      "tag": "block"
     }
-  ],
-  "route": {
-    "rules": [
-      {
-        "inbound": ["naive-in", "hy2-in"],
-        "outbound": "direct"
-      }
-    ]
-  }
+  ]
 }
 EOF
     chmod 600 $CONFIG_FILE
