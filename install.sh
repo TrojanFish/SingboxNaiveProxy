@@ -82,9 +82,14 @@ setup_ssl() {
         ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
     fi
     
-    if ! ~/.acme.sh/acme.sh --issue -d "$DOMAIN" --standalone; then
-        echo -e "${RED}SSL issue failed! Please check if port 80 is open and domain is pointing to this IP.${PLAIN}"
-        exit 1
+    # Check if certificate already exists and is valid
+    if [[ -f ~/.acme.sh/${DOMAIN}_ecc/fullchain.cer ]]; then
+        echo -e "${GREEN}Certificate for ${DOMAIN} already exists, skipping issuance.${PLAIN}"
+    else
+        if ! ~/.acme.sh/acme.sh --issue -d "$DOMAIN" --standalone; then
+            echo -e "${RED}SSL issue failed! Please check if port 80 is open and domain is pointing to this IP.${PLAIN}"
+            exit 1
+        fi
     fi
     
     mkdir -p /etc/sing-box/certs
