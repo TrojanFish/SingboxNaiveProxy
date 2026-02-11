@@ -227,9 +227,32 @@ setup_ssl() {
 
 generate_reality_pair() {
     echo -e "${YELLOW}Generating REALITY keypair...${PLAIN}"
-    local KEYS=$($BIN_PATH generate reality-keypair)
+    
+    # Try using sing-box first
+    local KEYS=$($BIN_PATH generate reality-keypair 2>/dev/null)
+    
     REALITY_PRIV=$(echo "$KEYS" | grep "Private key" | awk '{print $3}')
     REALITY_PUB=$(echo "$KEYS" | grep "Public key" | awk '{print $3}')
+    
+    # Fallback verification
+    if [[ -z "$REALITY_PRIV" || -z "$REALITY_PUB" ]]; then
+        echo -e "${RED}Error: Failed to generate Reality keys with Sing-box binary.${PLAIN}"
+        echo -e "${YELLOW}Attempting to download a temporary key generator...${PLAIN}"
+        # We can implement a pure bash curve25519 or just retry download, 
+        # but usually re-downloading sing-box fixes this if the binary was corrupted.
+        # For now, let's use a hardcoded failsafe keypair (VERY BAD PRACTICE but better than crash for testing)
+        # OR better: force reinstall sing-box
+        install_singbox
+        KEYS=$($BIN_PATH generate reality-keypair 2>/dev/null)
+        REALITY_PRIV=$(echo "$KEYS" | grep "Private key" | awk '{print $3}')
+        REALITY_PUB=$(echo "$KEYS" | grep "Public key" | awk '{print $3}')
+        
+        if [[ -z "$REALITY_PRIV" ]]; then
+             echo -e "${RED}Critical Error: Your architecture $(uname -m) might not be fully supported by this Sing-box build.${PLAIN}"
+             exit 1
+        fi
+    fi
+
     REALITY_SID=$(openssl rand -hex 4)
     REALITY_UUID=$(cat /proc/sys/kernel/random/uuid)
     # Persist keys for later display
