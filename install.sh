@@ -225,6 +225,8 @@ generate_reality_pair() {
     REALITY_PUB=$(echo "$KEYS" | grep "Public key" | awk '{print $3}')
     REALITY_SID=$(openssl rand -hex 4)
     REALITY_UUID=$(cat /proc/sys/kernel/random/uuid)
+    # Persist keys for later display
+    echo "$REALITY_PUB" > /etc/sing-box/reality_public.key
 }
 
 # Configuration Generation
@@ -350,15 +352,14 @@ show_config() {
     # Reality config
     local R_PORT=$(jq -r '.inbounds[] | select(.type=="vless") | .listen_port' $CONFIG_FILE)
     local R_UUID=$(jq -r '.inbounds[] | select(.type=="vless") | .users[0].uuid' $CONFIG_FILE)
-    local R_PUB=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.short_id[0]' $CONFIG_FILE) # Temp fix for display
-    # We need to re-fetch the public key because it's not stored in config, only private is.
-    # For a robust script, we'd store it. Let's assume we can re-generate or just use placeholders for now.
-    # Optimization: In a real scenario, we should store PUBLIC key in a file.
+    local R_SID=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.short_id[0]' $CONFIG_FILE)
+    local R_PUB=$(cat /etc/sing-box/reality_public.key 2>/dev/null || echo "STILL_NEED_MANUAL_CHECK")
+    local IPV4=$(curl -s4 --max-time 2 icanhazip.com || echo "your_ip")
     
     local LINK_NAV="https://${N_USER}:${N_PASS}@${DOMAIN}:443?padding=true#Naive_${DOMAIN}"
     local LINK_ROC="naive+https://${N_USER}:${N_PASS}@${DOMAIN}:443?padding=true#Naive_${DOMAIN}"
     local LINK_HY2="hysteria2://${H_PASS}@${DOMAIN}:${H_PORT}/?sni=${DOMAIN}&insecure=0#Hy2_${DOMAIN}"
-    local LINK_REA="vless://${R_UUID}@${IPV4}:${R_PORT}?security=reality&sni=dl.google.com&fp=chrome&pbk=YOUR_PUBLIC_KEY&sid=${R_PUB}&type=tcp&flow=xtls-rprx-vision#Reality_Backup"
+    local LINK_REA="vless://${R_UUID}@${IPV4}:${R_PORT}?security=reality&sni=dl.google.com&fp=chrome&pbk=${R_PUB}&sid=${R_SID}&type=tcp&flow=xtls-rprx-vision#Reality_${DOMAIN}"
     
     clear
     echo -e "${PURPLE}=============================================================${PLAIN}"
@@ -374,9 +375,8 @@ show_config() {
     echo -e "${GREEN}[2] Hysteria2 (Port: ${H_PORT})${PLAIN}"
     echo -e "  - Global Link: ${CYAN}${LINK_HY2}${PLAIN}"
     echo ""
-    echo -e "${GREEN}[3] VLESS-REALITY (Port: ${R_PORT}) [BACKUP]${PLAIN}"
+    echo -e "${GREEN}[3] VLESS-REALITY (Port: ${R_PORT})${PLAIN}"
     echo -e "  - Basic Link: ${CYAN}${LINK_REA}${PLAIN}"
-    echo -e "  - ${RED}Note: Replace YOUR_PUBLIC_KEY with the one shown during installation${PLAIN}"
     echo -e "${PURPLE}=============================================================${PLAIN}"
     echo ""
     echo -e "${YELLOW}QR Code for NaiveProxy (Rocket compatible):${PLAIN}"
@@ -461,7 +461,7 @@ show_menu() {
     
     echo -e " Sing-box: ${YELLOW}${CUR_V}${PLAIN} (Latest: ${LAT_V})"
     echo ""
-    echo -e "${YELLOW}1.${PLAIN} Install / Repair (NaiveProxy + Hysteria2)"
+    echo -e "${YELLOW}1.${PLAIN} Install / Repair (Naive+Hy2+Reality)"
     echo -e "${YELLOW}2.${PLAIN} Display Config Links & QR Codes"
     echo -e "${YELLOW}3.${PLAIN} Restart Services"
     echo -e "${YELLOW}4.${PLAIN} View Runtime Logs (20 lines)"
