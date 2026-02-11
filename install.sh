@@ -262,17 +262,17 @@ setup_warp() {
     fi
 
     echo -e "${YELLOW}Registering WARP account via API (this may take 10-20s)...${PLAIN}"
-    # Use a more reliable endpoint or local retry
-    local resp=$(curl --retry 3 --connect-timeout 10 -sL "https://api.zeroteam.top/warp?format=json")
+    local resp=""
+    local api_list=("https://api.zeroteam.top/warp?format=json" "https://warp-reg.vercel.app/api/reg")
     
-    if [[ -z "$resp" ]]; then
-        echo -e "${RED}Error: Network timeout or API unreachable. Cannot register WARP.${PLAIN}"
-        read -p "Press Enter to return..."
-        return
-    fi
-
-    if [[ $(echo "$resp" | jq -r '.code') != "200" ]]; then
-        echo -e "${RED}Error: API returned an error: $(echo "$resp" | jq -r '.msg')${PLAIN}"
+    for api in "${api_list[@]}"; do
+        echo -e "${CYAN}Trying API: $api${PLAIN}"
+        resp=$(curl --retry 2 --connect-timeout 8 -sL "$api")
+        [[ -n "$resp" && $(echo "$resp" | jq -r '.code // empty') == "200" ]] && break
+    done
+    
+    if [[ -z "$resp" || $(echo "$resp" | jq -r '.code // empty') != "200" ]]; then
+        echo -e "${RED}Error: All WARP APIs failed or timed out.${PLAIN}"
         read -p "Press Enter to return..."
         return
     fi
@@ -380,7 +380,7 @@ generate_config() {
     {
       "type": "naive",
       "tag": "naive-in",
-      "listen": "::",
+      "listen": "0.0.0.0",
       "listen_port": 443,
       "users": [
         {
@@ -398,7 +398,7 @@ generate_config() {
     {
       "type": "vless",
       "tag": "vless-reality-in",
-      "listen": "::",
+      "listen": "0.0.0.0",
       "listen_port": $REALITY_PORT,
       "users": [
         {
@@ -423,7 +423,7 @@ generate_config() {
     {
       "type": "hysteria2",
       "tag": "hy2-in",
-      "listen": "::",
+      "listen": "0.0.0.0",
       "listen_port": $HY2_PORT,
       "users": [
         {
@@ -440,6 +440,7 @@ generate_config() {
       "masquerade": "$HY2_MASK"
     }
   ],
+EOF
   "outbounds": [
     {
       "type": "direct",
@@ -528,9 +529,17 @@ LimitNOFILE=infinity
 WantedBy=multi-user.target
 EOF
 
-    systemctl daemon-reload
-    systemctl enable sing-box >/dev/null
-    systemctl restart sing-box
+    # Configuration check before restart
+    if "$BIN_PATH" check -c "$CONFIG_FILE" > /tmp/singbox_check 2>&1; then
+        systemctl daemon-reload
+        systemctl enable sing-box >/dev/null
+        systemctl restart sing-box
+        echo -e "${GREEN}Service configuration valid and restarted.${PLAIN}"
+    else
+        echo -e "${RED}Error: Configuration check failed! Service not restarted.${PLAIN}"
+        cat /tmp/singbox_check
+        read -p "Press Enter to continue..."
+    fi
     
     # Setup alias
     cp "$0" $SHORTCUT_BIN && chmod +x $SHORTCUT_BIN
