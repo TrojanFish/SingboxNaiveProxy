@@ -238,35 +238,63 @@ generate_reality_pair() {
 
 # WARP Management
 setup_warp() {
-    echo -e "${YELLOW}Installing/Updating Cloudflare WARP...${PLAIN}"
+    echo -e "${YELLOW}--- Cloudflare WARP Management ---${PLAIN}"
     
-    # We use a reliable API approach to get WARP credentials
-    # For speed and simplicity in this script, we'll use a pre-built register tool or curl logic
+    # Ensure dependencies are available
+    if ! command -v jq >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+        echo -e "${YELLOW}Installing required dependencies (curl, jq)...${PLAIN}"
+        install_dependencies >/dev/null 2>&1
+    fi
+
+    # Check if sing-box is installed
+    if [[ ! -f "$BIN_PATH" ]]; then
+        echo -e "${RED}Error: Sing-box is not installed! Please run Option 1 first.${PLAIN}"
+        read -p "Press Enter to return..."
+        return
+    fi
+    
     local WARP_CONF="/etc/sing-box/warp.json"
     
     if [[ -f "$WARP_CONF" ]]; then
-        echo -e "${CYAN}WARP is already configured.${PLAIN}"
-        read -p "Do you want to re-register? [y/N]: " re_warp
+        echo -e "${GREEN}WARP is already configured.${PLAIN}"
+        read -p "Do you want to re-register or update WARP? [y/N]: " re_warp
         [[ ! "$re_warp" =~ ^[Yy]$ ]] && return
     fi
 
-    echo -e "${YELLOW}Registering WARP account (please wait)...${PLAIN}"
-    # Use a simple python3 or curl based registration
-    # Here we use a safe-to-use community API endpoint for registration
-    local resp=$(curl -sL "https://api.zeroteam.top/warp?format=json")
+    echo -e "${YELLOW}Registering WARP account via API (this may take 10-20s)...${PLAIN}"
+    # Use a more reliable endpoint or local retry
+    local resp=$(curl --retry 3 --connect-timeout 10 -sL "https://api.zeroteam.top/warp?format=json")
+    
+    if [[ -z "$resp" ]]; then
+        echo -e "${RED}Error: Network timeout or API unreachable. Cannot register WARP.${PLAIN}"
+        read -p "Press Enter to return..."
+        return
+    fi
+
     if [[ $(echo "$resp" | jq -r '.code') != "200" ]]; then
-        echo -e "${RED}Failed to register WARP via API. Trying fallback...${PLAIN}"
-        # Fallback to local generation if needed (complex)
-        return 1
+        echo -e "${RED}Error: API returned an error: $(echo "$resp" | jq -r '.msg')${PLAIN}"
+        read -p "Press Enter to return..."
+        return
     fi
 
     echo "$resp" | jq '.data' > "$WARP_CONF"
-    echo -e "${GREEN}WARP account registered successfully!${PLAIN}"
+    if [[ ! -s "$WARP_CONF" ]]; then
+        echo -e "${RED}Error: Failed to write WARP data to $WARP_CONF${PLAIN}"
+        return
+    fi
+
+    echo -e "${GREEN}WARP account registered and saved to $WARP_CONF${PLAIN}"
+    
+    # Reload existing variables for config generation
+    if [[ -f $CONFIG_FILE ]]; then
+        DOMAIN=$(jq -r '.inbounds[] | select(.type=="naive") | .tls.server_name // empty' $CONFIG_FILE)
+    fi
     
     generate_config
     systemctl restart sing-box
-    echo -e "${GREEN}Sing-box restarted with WARP enabled.${PLAIN}"
-    sleep 2
+    echo -e "${GREEN}WARP has been integrated into Sing-box and service restarted!${PLAIN}"
+    echo -e "${CYAN}ChatGPT/Netflix should be unlocked now.${PLAIN}"
+    sleep 3
 }
 
 # Configuration Generation
