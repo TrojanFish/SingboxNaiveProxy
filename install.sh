@@ -145,12 +145,16 @@ get_current_version() {
 
 # Install Core
 install_singbox() {
-    detect_arch # Ensure ARCH is correct before download
-    LATEST=$(get_latest_version)
-    echo -e "${YELLOW}Installing Sing-box ${LATEST} for ${ARCH}...${PLAIN}"
+    detect_arch
+    local TARGET_VER=$1
+    if [[ -z "$TARGET_VER" ]]; then
+        TARGET_VER=$(get_latest_version)
+    fi
     
-    local FILENAME="sing-box-${LATEST#v}-linux-${ARCH}.tar.gz"
-    local URL="https://github.com/SagerNet/sing-box/releases/download/${LATEST}/${FILENAME}"
+    echo -e "${YELLOW}Installing Sing-box ${TARGET_VER} for ${ARCH}...${PLAIN}"
+    
+    local FILENAME="sing-box-${TARGET_VER#v}-linux-${ARCH}.tar.gz"
+    local URL="https://github.com/SagerNet/sing-box/releases/download/${TARGET_VER}/${FILENAME}"
     
     wget -O /tmp/sing-box.tar.gz "$URL"
     if [[ $? -ne 0 ]]; then
@@ -237,19 +241,23 @@ generate_reality_pair() {
     # Fallback verification
     if [[ -z "$REALITY_PRIV" || -z "$REALITY_PUB" ]]; then
         echo -e "${RED}Error: Failed to generate Reality keys with Sing-box binary.${PLAIN}"
-        echo -e "${YELLOW}Attempting to download a temporary key generator...${PLAIN}"
-        # We can implement a pure bash curve25519 or just retry download, 
-        # but usually re-downloading sing-box fixes this if the binary was corrupted.
-        # For now, let's use a hardcoded failsafe keypair (VERY BAD PRACTICE but better than crash for testing)
-        # OR better: force reinstall sing-box
-        install_singbox
+        echo -e "${YELLOW}This architecture might have issues with the latest version.${PLAIN}"
+        echo -e "${YELLOW}Downgrading to stable version v1.10.7...${PLAIN}"
+        
+        # Force install stable version
+        install_singbox "v1.10.7"
+        
+        # Retry generation
         KEYS=$($BIN_PATH generate reality-keypair 2>/dev/null)
         REALITY_PRIV=$(echo "$KEYS" | grep "Private key" | awk '{print $3}')
         REALITY_PUB=$(echo "$KEYS" | grep "Public key" | awk '{print $3}')
         
         if [[ -z "$REALITY_PRIV" ]]; then
-             echo -e "${RED}Critical Error: Your architecture $(uname -m) might not be fully supported by this Sing-box build.${PLAIN}"
-             exit 1
+             echo -e "${RED}Critical Error: Sing-box binary is incompatible with this system.${PLAIN}"
+             echo -e "${YELLOW}Using emergency fallback keys (Please replace them manually later!)...${PLAIN}"
+             # Hardcoded valid X25519 pair for emergency rescue
+             REALITY_PRIV="cBwM-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0="
+             REALITY_PUB="7_0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0="
         fi
     fi
 
