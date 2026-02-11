@@ -440,7 +440,6 @@ generate_config() {
       "masquerade": "$HY2_MASK"
     }
   ],
-EOF
   "outbounds": [
     {
       "type": "direct",
@@ -456,6 +455,7 @@ EOF
     ]
   }
 }
+EOF
 EOF
     chmod 600 $CONFIG_FILE
 }
