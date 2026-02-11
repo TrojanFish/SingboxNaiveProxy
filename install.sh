@@ -267,12 +267,18 @@ setup_warp() {
     
     for api in "${api_list[@]}"; do
         echo -e "${CYAN}Trying API: $api${PLAIN}"
-        resp=$(curl --retry 2 --connect-timeout 8 -sL "$api")
-        [[ -n "$resp" && $(echo "$resp" | jq -r '.code // empty') == "200" ]] && break
+        resp=$(curl --retry 1 --connect-timeout 5 -sL "$api")
+        # Validate if response is a valid JSON with code 200
+        if echo "$resp" | jq -e '.code == "200"' >/dev/null 2>&1; then
+            break
+        else
+            resp=""
+        fi
     done
     
-    if [[ -z "$resp" || $(echo "$resp" | jq -r '.code // empty') != "200" ]]; then
-        echo -e "${RED}Error: All WARP APIs failed or timed out.${PLAIN}"
+    if [[ -z "$resp" ]]; then
+        echo -e "${RED}Error: All WARP APIs failed. This is usually due to network censorship or API rate limits.${PLAIN}"
+        echo -e "${YELLOW}Tip: Try running this command later or check your VPS network for Cloudflare connectivity.${PLAIN}"
         read -p "Press Enter to return..."
         return
     fi
@@ -546,12 +552,29 @@ EOF
 
 # Uninstall
 uninstall() {
-    echo -e "${RED}Uninstalling Sing-box and all configurations...${PLAIN}"
+    echo -e "${RED}Uninstalling Sing-box and all related components...${PLAIN}"
+    
+    # Stop and remove service
     systemctl stop sing-box 2>/dev/null
     systemctl disable sing-box 2>/dev/null
-    rm -f $SERVICE_FILE $BIN_PATH $SHORTCUT_BIN /etc/sysctl.d/99-singbox.conf
+    rm -f $SERVICE_FILE $BIN_PATH $SHORTCUT_BIN
+    
+    # Remove system libraries
+    rm -f /usr/lib/libcronet.so /usr/local/lib/libcronet.so
+    ldconfig
+    
+    # Remove configs and certs
     rm -rf /etc/sing-box
-    echo -e "${GREEN}Uninstallation completed.${PLAIN}"
+    
+    # Remove system optimizations
+    rm -f /etc/sysctl.d/99-singbox.conf
+    sysctl --system >/dev/null 2>&1
+    
+    # Optional: notice about acme.sh
+    echo -e "${YELLOW}Note: ~/.acme.sh and your SSL data remain intact for safety.${PLAIN}"
+    echo -e "${YELLOW}If you want to remove them manually: rm -rf ~/.acme.sh${PLAIN}"
+    
+    echo -e "${GREEN}Deep uninstallation completed. All system-level changes reverted.${PLAIN}"
 }
 
 # VPS Status Display
