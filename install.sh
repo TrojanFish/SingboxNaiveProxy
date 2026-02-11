@@ -320,13 +320,18 @@ generate_config() {
         REALITY_UUID=$(jq -r '.inbounds[] | select(.type=="vless") | .users[0].uuid // empty' $CONFIG_FILE 2>/dev/null)
     fi
     
+    # Force regeneration if critical keys are missing (Fix for 'invalid private key')
+    if [[ -z "$REALITY_PRIV" || -z "$REALITY_SID" || -z "$REALITY_UUID" ]]; then
+        generate_reality_pair
+    fi
+
     [[ -z "$NAIVE_USER" ]] && NAIVE_USER=$(openssl rand -hex 4)
     [[ -z "$NAIVE_PASS" ]] && NAIVE_PASS=$(openssl rand -hex 8)
     [[ -z "$HY2_PASS" ]] && HY2_PASS=$(openssl rand -hex 12)
     [[ -z "$HY2_PORT" ]] && HY2_PORT=$(shuf -i 15000-60000 -n 1)
     [[ -z "$HY2_MASK" ]] && HY2_MASK="https://www.xiaohongshu.com/"
     
-    # Generate Reality if not exist
+    # Generate Reality if not exist (Double check)
     if [[ -z "$REALITY_PRIV" ]]; then
         generate_reality_pair
     fi
