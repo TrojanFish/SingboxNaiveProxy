@@ -309,16 +309,15 @@ generate_config() {
     
     # Load or generate credentials
     if [[ -f $CONFIG_FILE ]]; then
-        NAIVE_USER=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].username // empty' $CONFIG_FILE)
-        NAIVE_PASS=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].password // empty' $CONFIG_FILE)
-        HY2_PASS=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .users[0].password // empty' $CONFIG_FILE)
-        HY2_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port // empty' $CONFIG_FILE)
-        HY2_MASK=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .masquerade // empty' $CONFIG_FILE)
+        NAIVE_USER=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].username // empty' $CONFIG_FILE 2>/dev/null)
+        NAIVE_PASS=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].password // empty' $CONFIG_FILE 2>/dev/null)
+        HY2_PASS=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .users[0].password // empty' $CONFIG_FILE 2>/dev/null)
+        HY2_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port // empty' $CONFIG_FILE 2>/dev/null)
+        HY2_MASK=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .masquerade // empty' $CONFIG_FILE 2>/dev/null)
         # Reality persistence
-        REALITY_PRIV=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.private_key // empty' $CONFIG_FILE)
-        REALITY_PUB=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.short_id // empty' $CONFIG_FILE) # We reuse SID storage for simple scripts
-        [[ -n "$REALITY_PRIV" ]] && REALITY_SID=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.short_id[0] // empty' $CONFIG_FILE)
-        REALITY_UUID=$(jq -r '.inbounds[] | select(.type=="vless") | .users[0].uuid // empty' $CONFIG_FILE)
+        REALITY_PRIV=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.private_key // empty' $CONFIG_FILE 2>/dev/null)
+        REALITY_SID=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.short_id[0] // empty' $CONFIG_FILE 2>/dev/null)
+        REALITY_UUID=$(jq -r '.inbounds[] | select(.type=="vless") | .users[0].uuid // empty' $CONFIG_FILE 2>/dev/null)
     fi
     
     [[ -z "$NAIVE_USER" ]] && NAIVE_USER=$(openssl rand -hex 4)
@@ -376,7 +375,7 @@ generate_config() {
         },'
     fi
 
-    cat > $CONFIG_FILE <<EOF
+    cat > $CONFIG_FILE <<_EOF_CONFIG_
 {
   "log": {
     "level": "info",
@@ -461,7 +460,7 @@ generate_config() {
     ]
   }
 }
-EOF
+_EOF_CONFIG_
     chmod 600 $CONFIG_FILE
 }
 
