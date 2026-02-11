@@ -229,43 +229,6 @@ setup_ssl() {
         --reloadcmd "systemctl restart sing-box" >> /dev/null 2>&1
 }
 
-generate_reality_pair() {
-    echo -e "${YELLOW}Generating REALITY keypair...${PLAIN}"
-    
-    # Try using sing-box first
-    local KEYS=$($BIN_PATH generate reality-keypair 2>/dev/null)
-    
-    REALITY_PRIV=$(echo "$KEYS" | grep "Private key" | awk '{print $3}')
-    REALITY_PUB=$(echo "$KEYS" | grep "Public key" | awk '{print $3}')
-    
-    # Fallback verification
-    if [[ -z "$REALITY_PRIV" || -z "$REALITY_PUB" ]]; then
-        echo -e "${RED}Error: Failed to generate Reality keys with Sing-box binary.${PLAIN}"
-        echo -e "${YELLOW}This architecture might have issues with the latest version.${PLAIN}"
-        echo -e "${YELLOW}Downgrading to stable version v1.10.7...${PLAIN}"
-        
-        # Force install stable version
-        install_singbox "v1.10.7"
-        
-        # Retry generation
-        KEYS=$($BIN_PATH generate reality-keypair 2>/dev/null)
-        REALITY_PRIV=$(echo "$KEYS" | grep "Private key" | awk '{print $3}')
-        REALITY_PUB=$(echo "$KEYS" | grep "Public key" | awk '{print $3}')
-        
-        if [[ -z "$REALITY_PRIV" ]]; then
-             echo -e "${RED}Critical Error: Sing-box binary is incompatible with this system.${PLAIN}"
-             echo -e "${YELLOW}Using emergency fallback keys (Please replace them manually later!)...${PLAIN}"
-             # Hardcoded valid X25519 pair for emergency rescue
-             REALITY_PRIV="cBwM-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0="
-             REALITY_PUB="7_0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0="
-        fi
-    fi
-
-    REALITY_SID=$(openssl rand -hex 4)
-    REALITY_UUID=$(cat /proc/sys/kernel/random/uuid)
-    # Persist keys for later display
-    echo "$REALITY_PUB" > /etc/sing-box/reality_public.key
-}
 
 # WARP Management
 setup_warp() {
@@ -345,28 +308,13 @@ generate_config() {
         HY2_PASS=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .users[0].password // empty' $CONFIG_FILE 2>/dev/null)
         HY2_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port // empty' $CONFIG_FILE 2>/dev/null)
         HY2_MASK=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .masquerade // empty' $CONFIG_FILE 2>/dev/null)
-        # Reality persistence
-        REALITY_PRIV=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.private_key // empty' $CONFIG_FILE 2>/dev/null)
-        REALITY_SID=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.short_id[0] // empty' $CONFIG_FILE 2>/dev/null)
-        REALITY_UUID=$(jq -r '.inbounds[] | select(.type=="vless") | .users[0].uuid // empty' $CONFIG_FILE 2>/dev/null)
     fi
     
-    # Force regeneration if critical keys are missing (Fix for 'invalid private key')
-    if [[ -z "$REALITY_PRIV" || -z "$REALITY_SID" || -z "$REALITY_UUID" ]]; then
-        generate_reality_pair
-    fi
-
     [[ -z "$NAIVE_USER" ]] && NAIVE_USER=$(openssl rand -hex 4)
     [[ -z "$NAIVE_PASS" ]] && NAIVE_PASS=$(openssl rand -hex 8)
     [[ -z "$HY2_PASS" ]] && HY2_PASS=$(openssl rand -hex 12)
     [[ -z "$HY2_PORT" ]] && HY2_PORT=$(shuf -i 15000-60000 -n 1)
     [[ -z "$HY2_MASK" ]] && HY2_MASK="https://www.xiaohongshu.com/"
-    
-    # Generate Reality if not exist (Double check)
-    if [[ -z "$REALITY_PRIV" ]]; then
-        generate_reality_pair
-    fi
-    REALITY_PORT=$(shuf -i 15000-60000 -n 1)
 
     # WARP Integration Check
     local WARP_OUTBOUND=""
@@ -434,31 +382,6 @@ generate_config() {
         "server_name": "$DOMAIN",
         "certificate_path": "/etc/sing-box/certs/fullchain.pem",
         "key_path": "/etc/sing-box/certs/private.key"
-      }
-    },
-    {
-      "type": "vless",
-      "tag": "vless-reality-in",
-      "listen": "0.0.0.0",
-      "listen_port": $REALITY_PORT,
-      "users": [
-        {
-          "uuid": "$REALITY_UUID",
-          "flow": "xtls-rprx-vision"
-        }
-      ],
-      "tls": {
-        "enabled": true,
-        "server_name": "dl.google.com",
-        "reality": {
-          "enabled": true,
-          "handshake": {
-            "server": "dl.google.com",
-            "server_port": 443
-          },
-          "private_key": "$REALITY_PRIV",
-          "short_id": ["$REALITY_SID"]
-        }
       }
     },
     {
@@ -534,9 +457,6 @@ show_config() {
     echo ""
     echo -e "${GREEN}[2] Hysteria2 (Port: ${H_PORT})${PLAIN}"
     echo -e "  - Global Link: ${CYAN}${LINK_HY2}${PLAIN}"
-    echo ""
-    echo -e "${GREEN}[3] VLESS-REALITY (Port: ${R_PORT})${PLAIN}"
-    echo -e "  - Basic Link: ${CYAN}${LINK_REA}${PLAIN}"
     echo -e "${PURPLE}=============================================================${PLAIN}"
     echo ""
     echo -e "${YELLOW}QR Code for NaiveProxy (Rocket compatible):${PLAIN}"
@@ -646,7 +566,7 @@ show_menu() {
     
     echo -e " Sing-box: ${YELLOW}${CUR_V}${PLAIN} (Latest: ${LAT_V})"
     echo ""
-    echo -e "${YELLOW}1.${PLAIN} Install / Repair (Naive+Hy2+Reality)"
+    echo -e "${YELLOW}1.${PLAIN} Install / Repair (Naive+Hy2)"
     echo -e "${YELLOW}2.${PLAIN} Display Config Links & QR Codes"
     echo -e "${YELLOW}3.${PLAIN} Restart Services"
     echo -e "${YELLOW}4.${PLAIN} View Runtime Logs (20 lines)"
