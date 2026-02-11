@@ -432,17 +432,10 @@ show_config() {
     local N_PASS=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].password' $CONFIG_FILE)
     local H_PASS=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .users[0].password' $CONFIG_FILE)
     local H_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port' $CONFIG_FILE)
-    # Reality config
-    local R_PORT=$(jq -r '.inbounds[] | select(.type=="vless") | .listen_port' $CONFIG_FILE)
-    local R_UUID=$(jq -r '.inbounds[] | select(.type=="vless") | .users[0].uuid' $CONFIG_FILE)
-    local R_SID=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.short_id[0]' $CONFIG_FILE)
-    local R_PUB=$(cat /etc/sing-box/reality_public.key 2>/dev/null || echo "STILL_NEED_MANUAL_CHECK")
     local IPV4=$(curl -s4 --max-time 2 icanhazip.com || echo "your_ip")
-    
     local LINK_NAV="https://${N_USER}:${N_PASS}@${DOMAIN}:443?padding=true#Naive_${DOMAIN}"
     local LINK_ROC="naive+https://${N_USER}:${N_PASS}@${DOMAIN}:443?padding=true#Naive_${DOMAIN}"
     local LINK_HY2="hysteria2://${H_PASS}@${DOMAIN}:${H_PORT}/?sni=${DOMAIN}&insecure=0#Hy2_${DOMAIN}"
-    local LINK_REA="vless://${R_UUID}@${IPV4}:${R_PORT}?security=reality&sni=dl.google.com&fp=chrome&pbk=${R_PUB}&sid=${R_SID}&type=tcp&flow=xtls-rprx-vision#Reality_${DOMAIN}"
     
     clear
     echo -e "${PURPLE}=============================================================${PLAIN}"
