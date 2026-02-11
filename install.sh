@@ -456,7 +456,6 @@ generate_config() {
   }
 }
 EOF
-EOF
     chmod 600 $CONFIG_FILE
 }
 
