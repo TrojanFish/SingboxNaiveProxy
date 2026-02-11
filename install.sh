@@ -62,8 +62,15 @@ check_ports() {
                 local PID=$(lsof -i:"$port" -t | head -n 1)
                 local PNAME=$(ps -p "$PID" -o comm= 2>/dev/null)
                 if [[ "$PNAME" != "sing-box" && -n "$PNAME" ]]; then
-                    echo -e "${RED}Error: Port $port is used by $PNAME (PID: $PID). Please stop it first!${PLAIN}"
-                    exit 1
+                    echo -e "${YELLOW}Warning: Port $port is used by $PNAME (PID: $PID).${PLAIN}"
+                    read -p "Do you want to kill this process and continue? [y/N]: " kill_it
+                    if [[ "$kill_it" =~ ^[Yy]$ ]]; then
+                        kill -9 "$PID"
+                        echo -e "${GREEN}Process $PNAME killed.${PLAIN}"
+                    else
+                        echo -e "${RED}Installation aborted by user.${PLAIN}"
+                        exit 1
+                    fi
                 fi
             fi
         fi
