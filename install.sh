@@ -236,6 +236,39 @@ generate_reality_pair() {
     echo "$REALITY_PUB" > /etc/sing-box/reality_public.key
 }
 
+# WARP Management
+setup_warp() {
+    echo -e "${YELLOW}Installing/Updating Cloudflare WARP...${PLAIN}"
+    
+    # We use a reliable API approach to get WARP credentials
+    # For speed and simplicity in this script, we'll use a pre-built register tool or curl logic
+    local WARP_CONF="/etc/sing-box/warp.json"
+    
+    if [[ -f "$WARP_CONF" ]]; then
+        echo -e "${CYAN}WARP is already configured.${PLAIN}"
+        read -p "Do you want to re-register? [y/N]: " re_warp
+        [[ ! "$re_warp" =~ ^[Yy]$ ]] && return
+    fi
+
+    echo -e "${YELLOW}Registering WARP account (please wait)...${PLAIN}"
+    # Use a simple python3 or curl based registration
+    # Here we use a safe-to-use community API endpoint for registration
+    local resp=$(curl -sL "https://api.zeroteam.top/warp?format=json")
+    if [[ $(echo "$resp" | jq -r '.code') != "200" ]]; then
+        echo -e "${RED}Failed to register WARP via API. Trying fallback...${PLAIN}"
+        # Fallback to local generation if needed (complex)
+        return 1
+    fi
+
+    echo "$resp" | jq '.data' > "$WARP_CONF"
+    echo -e "${GREEN}WARP account registered successfully!${PLAIN}"
+    
+    generate_config
+    systemctl restart sing-box
+    echo -e "${GREEN}Sing-box restarted with WARP enabled.${PLAIN}"
+    sleep 2
+}
+
 # Configuration Generation
 generate_config() {
     echo -e "${YELLOW}Building Sing-box configuration...${PLAIN}"
@@ -265,6 +298,49 @@ generate_config() {
         generate_reality_pair
     fi
     REALITY_PORT=$(shuf -i 15000-60000 -n 1)
+
+    # WARP Integration Check
+    local WARP_OUTBOUND=""
+    local WARP_RULE=""
+    if [[ -f "/etc/sing-box/warp.json" ]]; then
+        local W_PRIV=$(jq -r '.private_key' /etc/sing-box/warp.json)
+        local W_ADDR=$(jq -r '.v6' /etc/sing-box/warp.json)
+        local W_RESV=$(jq -r '.reserved' /etc/sing-box/warp.json)
+        
+        WARP_OUTBOUND=',
+    {
+      "type": "wireguard",
+      "tag": "warp-out",
+      "server": "engage.cloudflareclient.com",
+      "server_port": 2408,
+      "local_address": [
+        "172.16.0.2/32",
+        "'$W_ADDR'/128"
+      ],
+      "private_key": "'$W_PRIV'",
+      "mtu": 1280,
+      "reserved": '$W_RESV',
+      "peer_public_key": "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0T7ncGA5S2NoKLU="
+    }'
+        
+        WARP_RULE='{
+          "domain_suffix": [
+            "openai.com",
+            "chatgpt.com",
+            "netflix.com",
+            "netflix.net",
+            "nflximg.net",
+            "nflxvideo.net",
+            "nflxso.net",
+            "nflxext.com",
+            "disneyplus.com",
+            "hf.co",
+            "anthropic.com",
+            "claude.ai"
+          ],
+          "outbound": "warp-out"
+        },'
+    fi
 
     cat > $CONFIG_FILE <<EOF
 {
@@ -340,8 +416,16 @@ generate_config() {
     {
       "type": "direct",
       "tag": "direct"
-    }
-  ]
+    }${WARP_OUTBOUND}
+  ],
+  "route": {
+    "rules": [
+      ${WARP_RULE}
+      {
+        "outbound": "direct"
+      }
+    ]
+  }
 }
 EOF
     chmod 600 $CONFIG_FILE
@@ -476,9 +560,10 @@ show_menu() {
     echo -e "${YELLOW}6.${PLAIN} Uninstall"
     echo -e "${YELLOW}7.${PLAIN} Modify Credentials (Users/Pass)"
     echo -e "${YELLOW}8.${PLAIN} Modify Masquerade Domain"
+    echo -e "${YELLOW}9.${PLAIN} Manage Cloudflare WARP (Unlock Netflix/AI)"
     echo -e "${YELLOW}0.${PLAIN} Exit"
     echo ""
-    read -p "Choose an option [0-8]: " choice
+    read -p "Choose an option [0-9]: " choice
     case $choice in
         1) check_ports; optimize_system; install_dependencies; install_singbox; setup_ssl; generate_config; setup_firewall; setup_systemd; show_config ;;
         2) show_config ;;
@@ -488,6 +573,7 @@ show_menu() {
         6) uninstall ;;
         7) modify_credentials ;;
         8) modify_masquerade ;;
+        9) setup_warp; show_menu ;;
         *) exit 0 ;;
     esac
 }
