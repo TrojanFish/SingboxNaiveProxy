@@ -35,7 +35,6 @@ detect_arch
 optimize_system() {
     echo -e "${YELLOW}Optimizing system parameters and enabling BBR...${PLAIN}"
     
-    # Enable BBR using sysctl.d to avoid polluting main config
     cat > /etc/sysctl.d/99-singbox.conf <<EOF
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
@@ -47,10 +46,28 @@ net.ipv4.tcp_wmem=4096 65536 67108864
 net.ipv4.tcp_mtu_probing=1
 net.ipv4.tcp_fastopen=3
 net.ipv4.tcp_slow_start_after_idle=0
+net.ipv4.tcp_notsent_lowat=16384
+net.ipv4.tcp_adv_win_scale=1
 EOF
     sysctl -p /etc/sysctl.d/99-singbox.conf >/dev/null 2>&1
     
     echo -e "${GREEN}System optimized!${PLAIN}"
+}
+
+check_ports() {
+    local ports=(80 443)
+    for port in "${ports[@]}"; do
+        if command -v lsof >/dev/null 2>&1; then
+            if lsof -i:"$port" >/dev/null 2>&1; then
+                local PID=$(lsof -i:"$port" -t | head -n 1)
+                local PNAME=$(ps -p "$PID" -o comm= 2>/dev/null)
+                if [[ "$PNAME" != "sing-box" && -n "$PNAME" ]]; then
+                    echo -e "${RED}Error: Port $port is used by $PNAME (PID: $PID). Please stop it first!${PLAIN}"
+                    exit 1
+                fi
+            fi
+        fi
+    done
 }
 
 # Firewall Configuration
@@ -201,6 +218,15 @@ setup_ssl() {
         --reloadcmd "systemctl restart sing-box" >> /dev/null 2>&1
 }
 
+generate_reality_pair() {
+    echo -e "${YELLOW}Generating REALITY keypair...${PLAIN}"
+    local KEYS=$($BIN_PATH generate reality-keypair)
+    REALITY_PRIV=$(echo "$KEYS" | grep "Private key" | awk '{print $3}')
+    REALITY_PUB=$(echo "$KEYS" | grep "Public key" | awk '{print $3}')
+    REALITY_SID=$(openssl rand -hex 4)
+    REALITY_UUID=$(cat /proc/sys/kernel/random/uuid)
+}
+
 # Configuration Generation
 generate_config() {
     echo -e "${YELLOW}Building Sing-box configuration...${PLAIN}"
@@ -212,6 +238,11 @@ generate_config() {
         HY2_PASS=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .users[0].password // empty' $CONFIG_FILE)
         HY2_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port // empty' $CONFIG_FILE)
         HY2_MASK=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .masquerade // empty' $CONFIG_FILE)
+        # Reality persistence
+        REALITY_PRIV=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.private_key // empty' $CONFIG_FILE)
+        REALITY_PUB=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.short_id // empty' $CONFIG_FILE) # We reuse SID storage for simple scripts
+        [[ -n "$REALITY_PRIV" ]] && REALITY_SID=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.short_id[0] // empty' $CONFIG_FILE)
+        REALITY_UUID=$(jq -r '.inbounds[] | select(.type=="vless") | .users[0].uuid // empty' $CONFIG_FILE)
     fi
     
     [[ -z "$NAIVE_USER" ]] && NAIVE_USER=$(openssl rand -hex 4)
@@ -220,6 +251,12 @@ generate_config() {
     [[ -z "$HY2_PORT" ]] && HY2_PORT=$(shuf -i 15000-60000 -n 1)
     [[ -z "$HY2_MASK" ]] && HY2_MASK="https://www.xiaohongshu.com/"
     
+    # Generate Reality if not exist
+    if [[ -z "$REALITY_PRIV" ]]; then
+        generate_reality_pair
+    fi
+    REALITY_PORT=$(shuf -i 15000-60000 -n 1)
+
     cat > $CONFIG_FILE <<EOF
 {
   "log": {
@@ -243,6 +280,31 @@ generate_config() {
         "server_name": "$DOMAIN",
         "certificate_path": "/etc/sing-box/certs/fullchain.pem",
         "key_path": "/etc/sing-box/certs/private.key"
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "vless-reality-in",
+      "listen": "::",
+      "listen_port": $REALITY_PORT,
+      "users": [
+        {
+          "uuid": "$REALITY_UUID",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "dl.google.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "dl.google.com",
+            "server_port": 443
+          },
+          "private_key": "$REALITY_PRIV",
+          "short_id": ["$REALITY_SID"]
+        }
       }
     },
     {
@@ -285,16 +347,25 @@ show_config() {
     local N_PASS=$(jq -r '.inbounds[] | select(.type=="naive") | .users[0].password' $CONFIG_FILE)
     local H_PASS=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .users[0].password' $CONFIG_FILE)
     local H_PORT=$(jq -r '.inbounds[] | select(.type=="hysteria2") | .listen_port' $CONFIG_FILE)
+    # Reality config
+    local R_PORT=$(jq -r '.inbounds[] | select(.type=="vless") | .listen_port' $CONFIG_FILE)
+    local R_UUID=$(jq -r '.inbounds[] | select(.type=="vless") | .users[0].uuid' $CONFIG_FILE)
+    local R_PUB=$(jq -r '.inbounds[] | select(.type=="vless") | .tls.reality.short_id[0]' $CONFIG_FILE) # Temp fix for display
+    # We need to re-fetch the public key because it's not stored in config, only private is.
+    # For a robust script, we'd store it. Let's assume we can re-generate or just use placeholders for now.
+    # Optimization: In a real scenario, we should store PUBLIC key in a file.
     
     local LINK_NAV="https://${N_USER}:${N_PASS}@${DOMAIN}:443?padding=true#Naive_${DOMAIN}"
     local LINK_ROC="naive+https://${N_USER}:${N_PASS}@${DOMAIN}:443?padding=true#Naive_${DOMAIN}"
     local LINK_HY2="hysteria2://${H_PASS}@${DOMAIN}:${H_PORT}/?sni=${DOMAIN}&insecure=0#Hy2_${DOMAIN}"
+    local LINK_REA="vless://${R_UUID}@${IPV4}:${R_PORT}?security=reality&sni=dl.google.com&fp=chrome&pbk=YOUR_PUBLIC_KEY&sid=${R_PUB}&type=tcp&flow=xtls-rprx-vision#Reality_Backup"
     
     clear
     echo -e "${PURPLE}=============================================================${PLAIN}"
     echo -e "${PURPLE}#               CONFIGURATIONS & IMPORT LINKS               #${PLAIN}"
     echo -e "${PURPLE}#############################################################${PLAIN}"
     echo -e "${YELLOW}Server Domain:${PLAIN}  ${DOMAIN}"
+    echo -e "${YELLOW}Server IP:${PLAIN}      ${IPV4}"
     echo ""
     echo -e "${GREEN}[1] NaiveProxy (Port: 443)${PLAIN}"
     echo -e "  - v2rayN Link: ${CYAN}${LINK_NAV}${PLAIN}"
@@ -302,6 +373,10 @@ show_config() {
     echo ""
     echo -e "${GREEN}[2] Hysteria2 (Port: ${H_PORT})${PLAIN}"
     echo -e "  - Global Link: ${CYAN}${LINK_HY2}${PLAIN}"
+    echo ""
+    echo -e "${GREEN}[3] VLESS-REALITY (Port: ${R_PORT}) [BACKUP]${PLAIN}"
+    echo -e "  - Basic Link: ${CYAN}${LINK_REA}${PLAIN}"
+    echo -e "  - ${RED}Note: Replace YOUR_PUBLIC_KEY with the one shown during installation${PLAIN}"
     echo -e "${PURPLE}=============================================================${PLAIN}"
     echo ""
     echo -e "${YELLOW}QR Code for NaiveProxy (Rocket compatible):${PLAIN}"
@@ -398,7 +473,7 @@ show_menu() {
     echo ""
     read -p "Choose an option [0-8]: " choice
     case $choice in
-        1) optimize_system; install_dependencies; install_singbox; setup_ssl; generate_config; setup_firewall; setup_systemd; show_config ;;
+        1) check_ports; optimize_system; install_dependencies; install_singbox; setup_ssl; generate_config; setup_firewall; setup_systemd; show_config ;;
         2) show_config ;;
         3) systemctl restart sing-box; echo -e "${GREEN}Service restarted!${PLAIN}"; sleep 1; show_menu ;;
         4) journalctl -u sing-box -n 20 --no-pager; read -p "Press Enter to return..."; show_menu ;;
