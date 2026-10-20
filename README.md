@@ -1,92 +1,149 @@
-﻿# Sing-box (NaiveProxy + Hysteria2 + WARP) 涓€閿儴缃茶剼鏈?
-閫傜敤浜?Linux VPS锛堟敮鎸?AMD64 / ARM64 / ARMv7 鏋舵瀯锛夌殑鐜颁唬鍖栦紒涓氱骇浠ｇ悊鑷姩鍖栭儴缃茶剼鏈€傚熀浜?[Sing-box](https://github.com/SagerNet/sing-box) 鏍稿績锛屾繁搴﹂泦鎴?**NaiveProxy**銆?*Hysteria2** 鍗忚浠ュ強 **Cloudflare WARP** 鍘熺敓娴佸獟浣撲笌 AI 瑙ｉ攣銆?
+# Sing-box (NaiveProxy + Hysteria2 + WARP) 一键部署脚本
+
+适用于 Linux VPS（支持 AMD64 / ARM64 / ARMv7 架构）的现代化企业级代理自动化部署脚本。基于 [Sing-box](https://github.com/SagerNet/sing-box) 核心，深度集成 **NaiveProxy**、**Hysteria2** 协议以及 **Cloudflare WARP** 原生流媒体与 AI 解锁。
+
 ---
 
-## 馃殌 鏍稿績鐗规€?
-- **鍙屾棗鑸板崗璁粍鍚?*锛?  - **NaiveProxy** (TCP/UDP 443)锛氱洿鎺ヨ皟鐢?Chromium 瀹樻柟缃戠粶鏍堬紝娴侀噺鐗瑰緛涓庢爣鍑?Chrome 娴忚鍣ㄥ畬鍏ㄤ竴鑷达紝鍏峰鏋佸己鐨勬姉灏侀攣銆佷富鍔ㄦ帰娴嬪厤鐤笌缁熻鍒嗘瀽鎶靛尽鑳藉姏銆?  - **Hysteria2** (UDP 鐙珛绔彛)锛氬熀浜?QUIC 鍗忚涓庡畾鍒舵嫢濉炴帶鍒剁畻娉曞紑鍙戯紝鎭跺姡缃戠粶涓庨珮涓㈠寘鐜涓嬩涪鍖呬笉闄嶉€燂紝鏆村姏璺戞弧 VPS 甯﹀銆?- **鏅鸿兘鍑虹珯鍒嗘祦 (Cloudflare WARP 浼橀€?& IPv4/IPv6 鍋忓ソ鍒囨崲)**锛?  - 鏈湴鐢熸垚 WireGuard 瀵嗛挜瀵瑰苟閫氳繃 Cloudflare 瀹樻柟 API 娉ㄥ唽锛岄粯璁ら噰鐢ㄤ紭閫?Anycast 鑺傜偣锛坄162.159.192.1:2408`锛夛紝绐佺牬浼犵粺榛樿鍩熷悕閬樆鏂殑鐥涚偣銆?  - **鏀寔鍑虹珯鍑哄彛鍋忓ソ鍒囨崲**锛氬彲涓€閿嚜鐢卞垏鎹负 **IPv6 浼樺厛锛堟瀬鍔涙帹鑽愶紝淇¤獕鏋侀珮闆堕獙璇佺爜锛?*銆?*IPv4 浼樺厛** 鎴?**鍙屾爤鑷€傚簲**銆?  - **鍏ㄥ AI 涓庢祦濯掍綋鍒嗘祦鐭╅樀**锛氳嚜鍔ㄥ皢 OpenAI銆丆hatGPT銆丼ora銆丆laude銆丳erplexity銆丠uggingFace 浠ュ強 Netflix銆丏isney+銆丼potify銆丮ax 绛夋湇鍔＄簿鍑嗗垎娴佽嚦 WARP锛屽交搴曡В闄ゅ尯鍩熷皝閿併€?- **UDP 绔彛璺宠穬 (Port Hopping)**锛?  - 鏀寔鑷畾涔夌鍙ｈ寖鍥达紙濡?`20000-50000`锛夐€忔槑閲嶅畾鍚戣浆鍙戯紝鍑荤鍗曠鍙ｉ珮鍚炲悙鐗瑰緛锛屾湁鏁堣閬胯繍钀ュ晢 QoS 闄愰€熸垨闃绘柇銆?- **鏋佸绾х綉缁滆皟浼樹笌鐜鑷€傚簲**锛?  - 鑷姩鍚敤 BBR 鎷ュ鎺у埗涓?FQ 闃熷垪瑙勫垯锛屾繁搴﹁皟浼?64MB 绯荤粺绾?UDP/QUIC 璇诲啓缂撳啿鍖恒€?  - **鏅鸿兘铏氭嫙鍖栬瘑鍒?*锛氬唴缃?`systemd-detect-virt` 棰勬锛屽湪 KVM/Xen 瀹夸富鏈哄簲鐢ㄥ唴鏍歌皟浼橈紝鍦?LXC/OpenVZ/Docker 绛夊鍣ㄧ幆澧冧腑浼橀泤璺宠繃锛屾潨缁濈郴缁熺骇鎶ラ敊銆?- **涓ユ牸鐨勫畨鍏ㄥ伐绋嬭璁?*锛?  - **鏉冮檺鏈€灏忓寲闅旂**锛氬垱寤轰笓鐢ㄧ郴缁熺骇 `sing-box` 鏃犵壒鏉冪敤鎴凤紝閫氳繃 Linux Capabilities锛坄CAP_NET_BIND_SERVICE` / `CAP_NET_ADMIN` / `CAP_NET_RAW`锛変繚鎸佷綆浣?443 绔彛缁戝畾鑳藉姏锛?*鍛婂埆 root 瑁稿杩愯**銆?  - **DNS 棰勬涓?IPv6 闄烽槺闃叉姢**锛氳瘉涔︾敵璇峰墠閫氳繃 DoH 鑷姩鏍￠獙鍩熷悕瑙ｆ瀽锛涜嫢妫€娴嬪埌鍩熷悕閰嶇疆浜?AAAA (IPv6) 瑙ｆ瀽浣嗘湇鍔″櫒鏃犲叕缃?IPv6锛屼富鍔ㄦ姤璀︽嫤鎴紝闃叉 Let's Encrypt 浼樺厛楠岃瘉 IPv6 瀵艰嚧璇佷功鐢宠鏆存瘷鍙婇鎺у彈闄愩€?  - **鍙屾爤闃茬伀澧欓棴鐜?*锛氬悓姝ラ厤缃?IPv4 (`iptables`) 涓?IPv6 (`ip6tables`) 鏀捐瑙勫垯锛屽叏鑷姩閫傞厤 Debian/Ubuntu (`iptables-persistent`) 鍙?RHEL/CentOS (`iptables-services`) 寮€鏈烘寔涔呭寲锛涘嵏杞芥椂**鍏ㄨ嚜鍔ㄥ洖婊氭竻鐞嗘墍鏈夎鍒欙紝闆剁郴缁熸畫鐣?*銆?  - **鏃犻檺閫熺増鏈姄鍙?*锛氶噰鐢?HTTP 閲嶅畾鍚戣拷韪渶鏂?Release Tag锛屽畬鍏ㄤ笉娑堣€?GitHub API 閰嶉锛屾牴娌?403 闄愰€熷洖閫€鑰佹棫鐗堟湰鐨勯棶棰樸€?
+## 🚀 核心特性
+
+- **双旗舰协议组合**：
+  - **NaiveProxy** (TCP/UDP 443)：直接调用 Chromium 官方网络栈，流量特征与标准 Chrome 浏览器完全一致，具备极强的抗封锁、主动探测免疫与统计分析抵御能力。
+  - **Hysteria2** (UDP 独立端口)：基于 QUIC 协议与定制拥塞控制算法开发，恶劣网络与高丢包环境下丢包不降速，暴力跑满 VPS 带宽。
+- **智能出站分流 (Cloudflare WARP 优选 & IPv4/IPv6 偏好切换)**：
+  - 本地生成 WireGuard 密钥对并通过 Cloudflare 官方 API 注册，默认采用优选 Anycast 节点（`162.159.192.1:2408`），突破传统默认域名遭阻断的痛点。
+  - **支持出站出口偏好切换**：可一键自由切换为 **IPv6 优先（极力推荐，信誉极高零验证码）**、**IPv4 优先** 或 **双栈自适应**。
+  - **全套 AI 与流媒体分流矩阵**：自动将 OpenAI、ChatGPT、Sora、Claude、Perplexity、HuggingFace 以及 Netflix、Disney+、Spotify、Max 等服务精准分流至 WARP，彻底解除区域封锁。
+- **UDP 端口跳跃 (Port Hopping)**：
+  - 支持自定义端口范围（如 `20000-50000`）透明重定向转发，击碎单端口高吞吐特征，有效规避运营商 QoS 限速或阻断。
+- **极客级网络调优与环境自适应**：
+  - 自动启用 BBR 拥塞控制与 FQ 队列规则，深度调优 64MB 系统级 UDP/QUIC 读写缓冲区。
+  - **智能虚拟化识别**：内置 `systemd-detect-virt` 预检，在 KVM/Xen 宿主机应用内核调优，在 LXC/OpenVZ/Docker 等容器环境中优雅跳过，杜绝系统级报错。
+- **严格的安全工程设计**：
+  - **权限最小化隔离**：创建专用系统级 `sing-box` 无特权用户，通过 Linux Capabilities（`CAP_NET_BIND_SERVICE` / `CAP_NET_ADMIN` / `CAP_NET_RAW`）保持低位 443 端口绑定能力，**告别 root 裸奔运行**。
+  - **DNS 预检与 IPv6 陷阱防护**：证书申请前通过 DoH 自动校验域名解析；若检测到域名配置了 AAAA (IPv6) 解析但服务器无公网 IPv6，主动报警拦截，防止 Let's Encrypt 优先验证 IPv6 导致证书申请暴毙及频控受限。
+  - **双栈防火墙闭环**：同步配置 IPv4 (`iptables`) 与 IPv6 (`ip6tables`) 放行规则，全自动适配 Debian/Ubuntu (`iptables-persistent`) 及 RHEL/CentOS (`iptables-services`) 开机持久化；卸载时**全自动回滚清理所有规则，零系统残留**。
+  - **无限速版本抓取**：采用 HTTP 重定向追踪最新 Release Tag，完全不消耗 GitHub API 配额，根治 403 限速回退老旧版本的问题。
+
 ---
 
-## 馃摜 蹇€熷畨瑁?
-鍦ㄦ偍鐨?VPS 涓婏紙闇€ root 鏉冮檺锛夋墽琛屼互涓嬪懡浠ゅ嵆鍙惎鍔ㄤ氦浜掑紡閮ㄧ讲锛?
+## 📥 快速安装
+
+在您的 VPS 上（需 root 权限）执行以下命令即可启动交互式部署：
+
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/TrojanFish/SingboxNaiveProxy/main/install.sh)
 ```
 
-澶囩敤瀹夎鍛戒护锛堣嫢鏃?curl锛夛細
+备用安装命令（若无 curl）：
 ```bash
 bash <(wget -qO- https://raw.githubusercontent.com/TrojanFish/SingboxNaiveProxy/main/install.sh)
 ```
 
 ---
 
-## 馃摉 鏋佺畝瀹夎姝ラ锛堢敤鎴疯瑙掞級
+## 📖 极简安装步骤（用户视角）
 
-鍙渶鍑嗗濂戒竴涓В鏋愬埌 VPS 鐨勫煙鍚嶏紝瀹夎杩囩▼鍙渶 **3 姝ヤ氦浜?*锛?
+只需准备好一个解析到 VPS 的域名，安装过程只需 **3 步交互**：
+
 ```text
-[鍑嗗] 灏嗗煙鍚嶉€氳繃 DNS 瑙ｆ瀽鍒?VPS 鍏綉 IP (Cloudflare 淇濇寔鈥滅伆鑹蹭簯鏈碘€?
-  鈫?[姝ラ 1] 鍦?VPS 缁堢绮樿创杩愯涓婅堪涓€閿畨瑁呭懡浠?  鈫?[姝ラ 2] 鍦ㄥ脊鍑虹殑涓荤鐞嗚彍鍗曚腑杈撳叆銆?銆嶅苟鍥炶溅
-  鈫?[姝ラ 3] 鎻愮ず銆孍nter your domain name:銆嶆椂锛岃緭鍏ヤ綘鐨勫煙鍚嶅苟鍥炶溅
-  鈫?[瀹屾垚] 鑴氭湰鍏ㄨ嚜鍔ㄥ畬鎴愬叏閮ㄧ紪璇戦厤缃紝灞忓箷鐩存帴鎵撳嵃鑺傜偣閾炬帴銆佷簩缁寸爜涓?Clash 閰嶇疆锛?```
+[准备] 将域名通过 DNS 解析到 VPS 公网 IP (Cloudflare 保持“灰色云朵”)
+  ↓
+[步骤 1] 在 VPS 终端粘贴运行上述一键安装命令
+  ↓
+[步骤 2] 在弹出的主管理菜单中输入「1」并回车
+  ↓
+[步骤 3] 提示「Enter your domain name:」时，输入你的域名并回车
+  ↓
+[完成] 脚本全自动完成全部编译配置，屏幕直接打印节点链接、二维码与 Clash 配置！
+```
 
 ---
 
-## 鈿欙笍 涓€閿畨瑁呭簳灞傝嚜鍔ㄥ寲娴佺▼锛堢郴缁熷唴閮ㄦ祦杞級
+## ⚙️ 一键安装底层自动化流程（系统内部流转）
 
-褰撲綘鍦ㄨ彍鍗曢€夋嫨 `1` 鍚庯紝鑴氭湰鍐呴儴浼氳嚜鍔ㄤ覆鑱旀墽琛屼互涓?9 涓樁娈碉細
+当你在菜单选择 `1` 后，脚本内部会自动串联执行以下 9 个阶段：
 
-1. **鐜涓庝緷璧栧畨瑁?*锛氳嚜鍔ㄦ娴嬬郴缁熸灦鏋勶紙AMD64/ARM64锛変笌鍖呯鐞嗗櫒锛岄潤榛樺畨瑁?`curl`銆乣jq`銆乣socat`銆乣qrencode`銆乣cron` 绛夊熀纭€渚濊禆銆?2. **绔彛鍐茬獊鎺掓煡**锛氫富鍔ㄦ娴?80 涓?443 绔彛鏄惁琚崰鐢紝鑻ヨ鍗犵敤浼氬弸濂芥彁绀虹敤鎴风‘璁ゆ槸鍚︽竻鐞嗭紝闃叉瀹夎鍗婇€斿け璐ャ€?3. **鍐呮牳鍙傛暟璋冧紭**锛氭娴嬪簳灞傝櫄鎷熷寲鐜锛岃嫢涓?KVM 鐗╃悊鏋舵瀯鍒欒嚜鍔ㄥ紑鍚?BBR 鎷ュ鎺у埗骞舵斁寮€ 64MB 绯荤粺缂撳啿鍖猴紱鑻ヤ负瀹瑰櫒鍒欎紭闆呰烦杩囥€?4. **鏍稿績浜岃繘鍒舵媺鍙?*锛氭棤闄愰€熻拷韪?GitHub 鏈€鏂扮ǔ瀹?Release锛屼笅杞藉畼鏂规牳蹇冨寘骞堕€氳繃涓ユ牸鐨?SHA256 瀹屾暣鎬ф牎楠岋紝瑙ｅ帇閮ㄧ讲銆?5. **DNS 棰勬涓?SSL 璇佷功鐢宠**锛氶€氳繃 DoH 棰勬鍩熷悕瑙ｆ瀽鐘舵€侊紝闃茶寖 IPv6 闄烽槺锛涗娇鐢?`acme.sh` 鑷姩鍚?Let's Encrypt 绛惧彂 ECC-256 寮哄姞瀵嗚瘉涔︺€?6. **鑷€傚簲閰嶇疆鏂囦欢鐢熸垚**锛氳嚜鍔ㄧ敓鎴愰珮寮哄害闅忔満瀵嗙爜涓?Hysteria2 鐙珛绔彛锛屼娇鐢?`jq` 绮惧噯鏋勫缓鍖呭惈 NaiveProxy 涓?Hysteria2 鐨?`config.json`锛屾潈闄愰攣瀹氫负 `600`銆?7. **鍏ㄦ爤鍙屽崗璁槻鐏鏀捐**锛氬悓姝ユ斁琛?UFW / Firewalld / iptables / ip6tables 鐨?80銆?43銆丠y2 绔彛锛屽苟璁剧疆寮€鏈鸿嚜鍔ㄦ寔涔呭寲鐢熸晥銆?8. **瀹夊叏闅旂涓庢湇鍔℃媺璧?*锛氳嚜鍔ㄥ垱寤轰笓鐢ㄧ殑绯荤粺鏃犵壒鏉冪敤鎴?`sing-box`锛屽垎閰?Linux Capabilities 缁戝畾浣庝綅 443 绔彛锛涢€氳繃 `sing-box check` 鏍￠獙閰嶇疆鏃犺鍚庡惎鍔ㄦ湇鍔″苟璁剧疆寮€鏈鸿嚜鍚€?9. **鑷姩娉ㄥ唽蹇嵎鍛戒护涓庤緭鍑虹粨鏋?*锛氳嚜鍔ㄥ皢鑴氭湰鑷韩閮ㄧ讲涓哄叏灞€鍛戒护 `nb`锛涙竻灞忚緭鍑鸿妭鐐?Universal 瀵煎叆閾炬帴銆丆lash Meta YAML 閰嶇疆鍙?Shadowrocket 缁堢浜岀淮鐮併€?
+1. **环境与依赖安装**：自动检测系统架构（AMD64/ARM64）与包管理器，静默安装 `curl`、`jq`、`socat`、`qrencode`、`cron` 等基础依赖。
+2. **端口冲突排查**：主动检测 80 与 443 端口是否被占用，若被占用会友好提示用户确认是否清理，防止安装半途失败。
+3. **内核参数调优**：检测底层虚拟化环境，若为 KVM 物理架构则自动开启 BBR 拥塞控制并放开 64MB 系统缓冲区；若为容器则优雅跳过。
+4. **核心二进制拉取**：无限速追踪 GitHub 最新稳定 Release，下载官方核心包并通过严格的 SHA256 完整性校验，解压部署。
+5. **DNS 预检与 SSL 证书申请**：通过 DoH 预检域名解析状态，防范 IPv6 陷阱；使用 `acme.sh` 自动向 Let's Encrypt 签发 ECC-256 强加密证书。
+6. **自适应配置文件生成**：自动生成高强度随机密码与 Hysteria2 独立端口，使用 `jq` 精准构建包含 NaiveProxy 与 Hysteria2 的 `config.json`，权限锁定为 `600`。
+7. **全栈双协议防火墙放行**：同步放行 UFW / Firewalld / iptables / ip6tables 的 80、443、Hy2 端口，并设置开机自动持久化生效。
+8. **安全隔离与服务拉起**：自动创建专用的系统无特权用户 `sing-box`，分配 Linux Capabilities 绑定低位 443 端口；通过 `sing-box check` 校验配置无误后启动服务并设置开机自启。
+9. **自动注册快捷命令与输出结果**：自动将脚本自身部署为全局命令 `nb`；清屏输出节点 Universal 导入链接、Clash Meta YAML 配置及 Shadowrocket 终端二维码。
+
 ---
 
-## 馃洜锔?绠＄悊鑿滃崟鍔熻兘
+## 🛠️ 管理菜单功能
 
-瀹夎瀹屾垚鍚庯紝鍦ㄧ粓绔换鎰忎綅缃緭鍏ュ揩鎹峰懡浠ゅ嵆鍙殢鏃跺敜鍑虹鐞嗛潰鏉匡紙宸插叏闈㈤€傞厤绠￠亾瀹夎锛屾潨缁濈┖鏂囦欢鍋囨锛夛細
+安装完成后，在终端任意位置输入快捷命令即可随时唤出管理面板（已全面适配管道安装，杜绝空文件假死）：
 
 ```bash
 nb
 ```
 
-鑿滃崟鍔熻兘閫夐」涓€瑙堬細
+菜单功能选项一览：
 
-| 閫夐」 | 鍔熻兘 | 鎻忚堪 |
+| 选项 | 功能 | 描述 |
 | :---: | :--- | :--- |
-| **1** | 瀹夎 / 閲嶆柊瀹夎 | 鑷姩鍖栧畬鎴愪緷璧栧畨瑁呫€佺鍙ｆ鏌ャ€佸唴鏍歌皟浼樸€佹牳蹇冩牎楠屻€丼SL 鐢宠涓庨厤缃瀯寤?|
-| **2** | 鏌ョ湅鑺傜偣閰嶇疆涓庨摼鎺?| 杈撳嚭 Universal 瀵煎叆閾炬帴銆佷簩缁寸爜鍙?Clash Meta (Mihomo) YAML 鑺傜偣閰嶇疆 |
-| **3** | 閲嶅惎鏈嶅姟 | 蹇€熷钩婊戦噸鍚?Sing-box 绯荤粺瀹堟姢杩涚▼ |
-| **4** | 鏌ョ湅瀹炴椂鏃ュ織 | 瀹炴椂鏌ョ湅 Sing-box 鏍稿績鏈€鏂拌緭鍑烘棩蹇楋紙30 琛岋級 |
-| **5** | 搴旂敤鍐呮牳涓?BBR 浼樺寲 | 鐙珛閰嶇疆 BBR 鍙?UDP 缂撳啿鍖虹郴缁熷弬鏁帮紙鏀寔瀹瑰櫒鐜鑷€傚簲锛?|
-| **6** | 褰诲簳鍗歌浇 | 鍋滄骞剁Щ闄ゆ湇鍔°€佷簩杩涘埗鏂囦欢銆佽嚜鍔ㄥ洖婊氭竻鐞嗛槻鐏瑙勫垯骞跺彲閫夋竻鐞嗚瘉涔?|
-| **7** | 淇敼鑺傜偣鍑瘉 | 蹇€熶慨鏀?NaiveProxy 鐢ㄦ埛鍚?瀵嗙爜鍙?Hysteria2 杩炴帴瀵嗙爜 |
-| **8** | 閰嶇疆 Hysteria2 楂樼骇椤?| 鑷畾涔?HTTP 浼绔欑偣銆侀厤缃?UDP 绔彛璺宠穬鑼冨洿鍙?Brutal 閫熺巼涓婇檺 |
-| **9** | 绠＄悊 Cloudflare WARP | 瀹樻柟 API 娉ㄥ唽銆佸垏鎹㈠嚭鍙?IP 鍋忓ソ (IPv6/IPv4/鍙屾爤鑷€傚簲)銆佺Щ闄?WARP |
-| **10** | 浠呭崌绾?Sing-box 鏍稿績 | 鑷姩鎷夊彇鏈€鏂?Release 鏍稿績浜岃繘鍒跺苟鎵ц SHA256 鏍￠獙鏇存柊 |
-| **0** | 閫€鍑虹鐞嗚剼鏈?| 閫€鍑轰氦浜掕彍鍗?|
+| **1** | 安装 / 重新安装 | 自动化完成依赖安装、端口检查、内核调优、核心校验、SSL 申请与配置构建 |
+| **2** | 查看节点配置与链接 | 输出 Universal 导入链接、二维码及 Clash Meta (Mihomo) YAML 节点配置 |
+| **3** | 重启服务 | 快速平滑重启 Sing-box 系统守护进程 |
+| **4** | 查看实时日志 | 实时查看 Sing-box 核心最新输出日志（30 行） |
+| **5** | 应用内核与 BBR 优化 | 独立配置 BBR 及 UDP 缓冲区系统参数（支持容器环境自适应） |
+| **6** | 彻底卸载 | 停止并移除服务、二进制文件、自动回滚清理防火墙规则并可选清理证书 |
+| **7** | 修改节点凭证 | 快速修改 NaiveProxy 用户名/密码及 Hysteria2 连接密码 |
+| **8** | 配置 Hysteria2 高级项 | 自定义 HTTP 伪装站点、配置 UDP 端口跳跃范围及 Brutal 速率上限 |
+| **9** | 管理 Cloudflare WARP | 官方 API 注册、切换出口 IP 偏好 (IPv6/IPv4/双栈自适应)、移除 WARP |
+| **10** | 仅升级 Sing-box 核心 | 自动拉取最新 Release 核心二进制并执行 SHA256 校验更新 |
+| **0** | 退出管理脚本 | 退出交互菜单 |
 
 ---
 
-## 馃摫 瀹㈡埛绔厤缃笌浣跨敤
+## 📱 客户端配置与使用
 
-杩愯鑿滃崟閫夐」 **`2`** 鍙互闅忔椂鏌ョ湅瀹屾暣鐨勮妭鐐逛俊鎭€佸垎浜摼鎺ャ€佷簩缁寸爜浠ュ強 Clash Meta 鑺傜偣浠ｇ爜銆?
+运行菜单选项 **`2`** 可以随时查看完整的节点信息、分享链接、二维码以及 Clash Meta 节点代码。
+
 ### 1. NaiveProxy
-- **閫氱敤瀹㈡埛绔?*锛氭敮鎸?[v2rayN](https://github.com/2dust/v2rayN)銆乕NekoBox](https://github.com/MatsuriDayo/nekoray)銆乕Sing-box](https://github.com/SagerNet/sing-box) 绛夈€傜洿鎺ュ鍏ヨ剼鏈緭鍑虹殑 `https://...` 閾炬帴鍗冲彲銆?- **Shadowrocket (灏忕伀绠?**锛?  - 绫诲瀷锛歚HTTPS`
-  - 鏈嶅姟鍣細鎮ㄧ殑鍩熷悕
-  - 绔彛锛歚443`
-  - 鐢ㄦ埛鍚?瀵嗙爜锛氭牴鎹畨瑁呰緭鍑烘垨閫夐」 7 鏌ョ湅
-  - ALPN锛歚h2`
+- **通用客户端**：支持 [v2rayN](https://github.com/2dust/v2rayN)、[NekoBox](https://github.com/MatsuriDayo/nekoray)、[Sing-box](https://github.com/SagerNet/sing-box) 等。直接导入脚本输出的 `https://...` 链接即可。
+- **Shadowrocket (小火箭)**：
+  - 类型：`HTTPS`
+  - 服务器：您的域名
+  - 端口：`443`
+  - 用户名/密码：根据安装输出或选项 7 查看
+  - ALPN：`h2`
 
 ### 2. Hysteria2
-- **閫氱敤閾炬帴**锛氫娇鐢?`hysteria2://` 鏍囧噯 URI 鏍煎紡锛屾敮鎸佸ぇ閮ㄥ垎鐜颁唬瀹㈡埛绔竴閿鍏ャ€?- **Clash Meta (Mihomo)**锛氳剼鏈彁渚涗簡寮€绠卞嵆鐢ㄧ殑 YAML 鑺傜偣浠ｇ爜鍧楋紝澶嶅埗鍒颁唬鐞嗛厤缃枃浠跺嵆鍙娇鐢ㄣ€?- **绔彛璺宠穬浣跨敤**锛氳嫢寮€鍚簡 UDP 绔彛璺宠穬锛堜緥濡?`20000-50000`锛夛紝鍦ㄥ鎴风绔彛璁剧疆澶勫～鍐欏搴旇烦璺冭寖鍥达紙Clash Meta 濉叆 `ports: 20000-50000`锛夛紝鍗冲彲鑷姩杞崲瑙勯伩杩愯惀鍟?QoS銆?
+- **通用链接**：使用 `hysteria2://` 标准 URI 格式，支持大部分现代客户端一键导入。
+- **Clash Meta (Mihomo)**：脚本提供了开箱即用的 YAML 节点代码块，复制到代理配置文件即可使用。
+- **端口跳跃使用**：若开启了 UDP 端口跳跃（例如 `20000-50000`），在客户端端口设置处填写对应跳跃范围（Clash Meta 填入 `ports: 20000-50000`），即可自动轮换规避运营商 QoS。
+
 ---
 
-## 鉂?甯歌闂涓庢帓鏌ユ寚鍗?
-1. **鍩熷悕瑙ｆ瀽涓?Cloudflare 璁剧疆**锛?   - 浣跨敤 NaiveProxy 蹇呴』鎷ユ湁涓€涓В鏋愯嚦 VPS 鐨勫煙鍚嶃€?   - 鑻ヤ娇鐢?Cloudflare 瑙ｆ瀽鍩熷悕锛?*浠ｇ悊鐘舵€佸繀椤昏缃负鈥滀粎闄?DNS鈥濓紙鐏拌壊浜戞湹锛?*锛屽垏鍕垮紑鍚?CDN 浠ｇ悊锛堟鑹蹭簯鏈碉級銆?   - **IPv6 鎻愮ず**锛氳嫢鏈嶅姟鍣ㄦ病鏈夊垎閰嶇嫭绔嬬殑鍏綉 IPv6锛岃涓嶈鍦?DNS 澶勬坊鍔?AAAA 璁板綍锛屽惁鍒?Let's Encrypt 浼樺厛楠岃瘉 IPv6 浼氬鑷寸敵璇峰け璐ャ€?2. **浜戞湇鍔″晢鍚庡彴瀹夊叏缁?/ 闃茬伀澧欏紑鏀剧鍙?*锛?   - **TCP 80**锛歀et's Encrypt 璇佷功鍒濇鐢宠涓庨獙璇併€?   - **TCP 443** & **UDP 443**锛歂aiveProxy 涓?HTTPS/QUIC 娴侀噺銆?   - **UDP [鑷畾涔夌鍙**锛欻ysteria2 鐩戝惉绔彛锛堥粯璁ら殢鏈虹敓鎴愶紝鍙嚜瀹氫箟锛夈€?   - **UDP [璺宠穬绔彛鑼冨洿]**锛氳嫢寮€鍚簡绔彛璺宠穬锛堝 `20000:50000`锛夛紝鍔″繀鍦ㄤ簯鍚庡彴寮€鏀炬鑼冨洿鐨?UDP 瑙勫垯銆?3. **鏌ョ湅瀹屾暣鏈嶅姟鏃ュ織**锛?   ```bash
+## ❓ 常见问题与排查指南
+
+1. **域名解析与 Cloudflare 设置**：
+   - 使用 NaiveProxy 必须拥有一个解析至 VPS 的域名。
+   - 若使用 Cloudflare 解析域名，**代理状态必须设置为“仅限 DNS”（灰色云朵）**，切勿开启 CDN 代理（橙色云朵）。
+   - **IPv6 提示**：若服务器没有分配独立的公网 IPv6，请不要在 DNS 处添加 AAAA 记录，否则 Let's Encrypt 优先验证 IPv6 会导致申请失败。
+2. **云服务商后台安全组 / 防火墙开放端口**：
+   - **TCP 80**：Let's Encrypt 证书初次申请与验证。
+   - **TCP 443** & **UDP 443**：NaiveProxy 与 HTTPS/QUIC 流量。
+   - **UDP [自定义端口]**：Hysteria2 监听端口（默认随机生成，可自定义）。
+   - **UDP [跳跃端口范围]**：若开启了端口跳跃（如 `20000:50000`），务必在云后台开放此范围的 UDP 规则。
+3. **查看完整服务日志**：
+   ```bash
    journalctl -u sing-box -f -o cat
    ```
-4. **鏈嶅姟杩愯鐘舵€佽嚜妫€**锛?   ```bash
+4. **服务运行状态自检**：
+   ```bash
    systemctl status sing-box
    ```
 
 ---
 
-## 馃摐 缁存姢涓庡紑婧?
-- **GitHub 浠撳簱**锛歔https://github.com/TrojanFish/SingboxNaiveProxy](https://github.com/TrojanFish/SingboxNaiveProxy)
-- **鍗忚瀹樻柟鏂囨。**锛歔Sing-box Documentation](https://sing-box.sagernet.org/)
+## 📜 维护与开源
+
+- **GitHub 仓库**：[https://github.com/TrojanFish/SingboxNaiveProxy](https://github.com/TrojanFish/SingboxNaiveProxy)
+- **协议官方文档**：[Sing-box Documentation](https://sing-box.sagernet.org/)
