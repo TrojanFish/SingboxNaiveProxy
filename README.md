@@ -1,64 +1,92 @@
-# Sing-box Ultimate 自动部署脚本
+﻿# Sing-box (NaiveProxy + Hysteria2 + WARP) 涓€閿儴缃茶剼鏈?
+閫傜敤浜?Linux VPS锛堟敮鎸?AMD64 / ARM64 / ARMv7 鏋舵瀯锛夌殑鐜颁唬鍖栦紒涓氱骇浠ｇ悊鑷姩鍖栭儴缃茶剼鏈€傚熀浜?[Sing-box](https://github.com/SagerNet/sing-box) 鏍稿績锛屾繁搴﹂泦鎴?**NaiveProxy**銆?*Hysteria2** 鍗忚浠ュ強 **Cloudflare WARP** 鍘熺敓娴佸獟浣撲笌 AI 瑙ｉ攣銆?
+---
 
-这是一个用于在 Linux VPS (支持 ARM 和 AMD 架构) 上快速部署 Sing-box 并配置多种顶级代理协议的自动化脚本。
+## 馃殌 鏍稿績鐗规€?
+- **鍙屾棗鑸板崗璁粍鍚?*锛?  - **NaiveProxy** (TCP/UDP 443)锛氱洿鎺ヨ皟鐢?Chromium 瀹樻柟缃戠粶鏍堬紝娴侀噺鐗瑰緛涓庢爣鍑?Chrome 娴忚鍣ㄥ畬鍏ㄤ竴鑷达紝鍏峰鏋佸己鐨勬姉灏侀攣銆佷富鍔ㄦ帰娴嬪厤鐤笌缁熻鍒嗘瀽鎶靛尽鑳藉姏銆?  - **Hysteria2** (UDP 鐙珛绔彛)锛氬熀浜?QUIC 鍗忚涓庡畾鍒舵嫢濉炴帶鍒剁畻娉曞紑鍙戯紝鎭跺姡缃戠粶涓庨珮涓㈠寘鐜涓嬩涪鍖呬笉闄嶉€燂紝鏆村姏璺戞弧 VPS 甯﹀銆?- **鏅鸿兘鍑虹珯鍒嗘祦 (Cloudflare WARP 浼橀€?& IPv4/IPv6 鍋忓ソ鍒囨崲)**锛?  - 鏈湴鐢熸垚 WireGuard 瀵嗛挜瀵瑰苟閫氳繃 Cloudflare 瀹樻柟 API 娉ㄥ唽锛岄粯璁ら噰鐢ㄤ紭閫?Anycast 鑺傜偣锛坄162.159.192.1:2408`锛夛紝绐佺牬浼犵粺榛樿鍩熷悕閬樆鏂殑鐥涚偣銆?  - **鏀寔鍑虹珯鍑哄彛鍋忓ソ鍒囨崲**锛氬彲涓€閿嚜鐢卞垏鎹负 **IPv6 浼樺厛锛堟瀬鍔涙帹鑽愶紝淇¤獕鏋侀珮闆堕獙璇佺爜锛?*銆?*IPv4 浼樺厛** 鎴?**鍙屾爤鑷€傚簲**銆?  - **鍏ㄥ AI 涓庢祦濯掍綋鍒嗘祦鐭╅樀**锛氳嚜鍔ㄥ皢 OpenAI銆丆hatGPT銆丼ora銆丆laude銆丳erplexity銆丠uggingFace 浠ュ強 Netflix銆丏isney+銆丼potify銆丮ax 绛夋湇鍔＄簿鍑嗗垎娴佽嚦 WARP锛屽交搴曡В闄ゅ尯鍩熷皝閿併€?- **UDP 绔彛璺宠穬 (Port Hopping)**锛?  - 鏀寔鑷畾涔夌鍙ｈ寖鍥达紙濡?`20000-50000`锛夐€忔槑閲嶅畾鍚戣浆鍙戯紝鍑荤鍗曠鍙ｉ珮鍚炲悙鐗瑰緛锛屾湁鏁堣閬胯繍钀ュ晢 QoS 闄愰€熸垨闃绘柇銆?- **鏋佸绾х綉缁滆皟浼樹笌鐜鑷€傚簲**锛?  - 鑷姩鍚敤 BBR 鎷ュ鎺у埗涓?FQ 闃熷垪瑙勫垯锛屾繁搴﹁皟浼?64MB 绯荤粺绾?UDP/QUIC 璇诲啓缂撳啿鍖恒€?  - **鏅鸿兘铏氭嫙鍖栬瘑鍒?*锛氬唴缃?`systemd-detect-virt` 棰勬锛屽湪 KVM/Xen 瀹夸富鏈哄簲鐢ㄥ唴鏍歌皟浼橈紝鍦?LXC/OpenVZ/Docker 绛夊鍣ㄧ幆澧冧腑浼橀泤璺宠繃锛屾潨缁濈郴缁熺骇鎶ラ敊銆?- **涓ユ牸鐨勫畨鍏ㄥ伐绋嬭璁?*锛?  - **鏉冮檺鏈€灏忓寲闅旂**锛氬垱寤轰笓鐢ㄧ郴缁熺骇 `sing-box` 鏃犵壒鏉冪敤鎴凤紝閫氳繃 Linux Capabilities锛坄CAP_NET_BIND_SERVICE` / `CAP_NET_ADMIN` / `CAP_NET_RAW`锛変繚鎸佷綆浣?443 绔彛缁戝畾鑳藉姏锛?*鍛婂埆 root 瑁稿杩愯**銆?  - **DNS 棰勬涓?IPv6 闄烽槺闃叉姢**锛氳瘉涔︾敵璇峰墠閫氳繃 DoH 鑷姩鏍￠獙鍩熷悕瑙ｆ瀽锛涜嫢妫€娴嬪埌鍩熷悕閰嶇疆浜?AAAA (IPv6) 瑙ｆ瀽浣嗘湇鍔″櫒鏃犲叕缃?IPv6锛屼富鍔ㄦ姤璀︽嫤鎴紝闃叉 Let's Encrypt 浼樺厛楠岃瘉 IPv6 瀵艰嚧璇佷功鐢宠鏆存瘷鍙婇鎺у彈闄愩€?  - **鍙屾爤闃茬伀澧欓棴鐜?*锛氬悓姝ラ厤缃?IPv4 (`iptables`) 涓?IPv6 (`ip6tables`) 鏀捐瑙勫垯锛屽叏鑷姩閫傞厤 Debian/Ubuntu (`iptables-persistent`) 鍙?RHEL/CentOS (`iptables-services`) 寮€鏈烘寔涔呭寲锛涘嵏杞芥椂**鍏ㄨ嚜鍔ㄥ洖婊氭竻鐞嗘墍鏈夎鍒欙紝闆剁郴缁熸畫鐣?*銆?  - **鏃犻檺閫熺増鏈姄鍙?*锛氶噰鐢?HTTP 閲嶅畾鍚戣拷韪渶鏂?Release Tag锛屽畬鍏ㄤ笉娑堣€?GitHub API 閰嶉锛屾牴娌?403 闄愰€熷洖閫€鑰佹棫鐗堟湰鐨勯棶棰樸€?
+---
 
-## 核心特点
-- **三剑客协议支持**：同时部署 **NaiveProxy**、**Hysteria2** 和 **VLESS-REALITY**。
-- **极致性能优化**：自动开启 BBR 并进行深度内核 TCP 调优，降低高延迟环境下的丢包与抖动。
-- **智能化预检**：安装前自动检测端口占用 (80/443)，防止安装失败。
-- **免域名备方案**：集成 REALITY 协议，无需域名和 SSL 证书即可直连，完美应对证书申请失败的情况。
-- **自动化证书**：使用 acme.sh 自动申请并续期 Let's Encrypt SSL 证书。
-
-## 快速安装与管理
-
-在您的 VPS 上运行以下命令：
-
+## 馃摜 蹇€熷畨瑁?
+鍦ㄦ偍鐨?VPS 涓婏紙闇€ root 鏉冮檺锛夋墽琛屼互涓嬪懡浠ゅ嵆鍙惎鍔ㄤ氦浜掑紡閮ㄧ讲锛?
 ```bash
-wget -N --no-check-certificate https://raw.githubusercontent.com/TrojanFish/SingboxNaiveProxy/main/install.sh && chmod +x install.sh && ./install.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/TrojanFish/SingboxNaiveProxy/main/install.sh)
 ```
 
-### 菜单选项
-1. **安装 / 修复**: 自动化完成内核调优、证书申请及三协议配置。
-2. **查看配置**: 显示 NaiveProxy、Hysteria2 及 REALITY 的导入链接。
-3. **系统优化**: 独立运行 BBR 与内核专项调优。
-4. **卸载**: 清理所有二进制文件及配置文件。
+澶囩敤瀹夎鍛戒护锛堣嫢鏃?curl锛夛細
+```bash
+bash <(wget -qO- https://raw.githubusercontent.com/TrojanFish/SingboxNaiveProxy/main/install.sh)
+```
 
 ---
 
-## 客户端设置教程
+## 馃摉 鏋佺畝瀹夎姝ラ锛堢敤鎴疯瑙掞級
 
-### 1. NaiveProxy (推荐)
-- **Shadowrocket**: 类型选 `HTTPS`，填写域名、端口 443 及用户名密码。
-- **ALPN**: 手动填写 `h2`。
-
-### 2. VLESS-REALITY (免域名备份)
-- **Shadowrocket**: 类型选 `VLESS`。
-- **传输方式**: `TCP`。
-- **UUID / Flow**: 填写脚本生成的 UUID，流控设为 `xtls-rprx-vision`。
-- **TLS**: 开启 `Reality`。
-- **SNI**: `dl.google.com` (或脚本中配置的伪装域名)。
-- **公钥 (Public Key)**: **务必**填写安装时控制台输出的 Public Key。
-
-### 3. Hysteria2 (抗丢包神器)
-- **Shadowrocket**: 直接添加 `Hysteria2` 类型，填写端口与密码即可。
+鍙渶鍑嗗濂戒竴涓В鏋愬埌 VPS 鐨勫煙鍚嶏紝瀹夎杩囩▼鍙渶 **3 姝ヤ氦浜?*锛?
+```text
+[鍑嗗] 灏嗗煙鍚嶉€氳繃 DNS 瑙ｆ瀽鍒?VPS 鍏綉 IP (Cloudflare 淇濇寔鈥滅伆鑹蹭簯鏈碘€?
+  鈫?[姝ラ 1] 鍦?VPS 缁堢绮樿创杩愯涓婅堪涓€閿畨瑁呭懡浠?  鈫?[姝ラ 2] 鍦ㄥ脊鍑虹殑涓荤鐞嗚彍鍗曚腑杈撳叆銆?銆嶅苟鍥炶溅
+  鈫?[姝ラ 3] 鎻愮ず銆孍nter your domain name:銆嶆椂锛岃緭鍏ヤ綘鐨勫煙鍚嶅苟鍥炶溅
+  鈫?[瀹屾垚] 鑴氭湰鍏ㄨ嚜鍔ㄥ畬鎴愬叏閮ㄧ紪璇戦厤缃紝灞忓箷鐩存帴鎵撳嵃鑺傜偣閾炬帴銆佷簩缁寸爜涓?Clash 閰嶇疆锛?```
 
 ---
 
-## 常见问题排查
+## 鈿欙笍 涓€閿畨瑁呭簳灞傝嚜鍔ㄥ寲娴佺▼锛堢郴缁熷唴閮ㄦ祦杞級
 
-1. **域名解析**: 使用 NaiveProxy 时，Cloudflare 的 **代理状态** 必须设置为 **仅限 DNS (灰色云朵)**。
-2. **端口开放**: 务必在云服务商后台防火墙开启以下端口：
-   - **TCP 443** (NaiveProxy)
-   - **UDP 443** (辅助)
-   - **UDP [随机端口]** (Hysteria2，见脚本安装输出)
-   - **TCP [随机端口]** (REALITY，见脚本安装输出)
-3. **REALITY 无法连接**: 检查客户端是否正确填入了 **Public Key** 以及 **Short ID**。
+褰撲綘鍦ㄨ彍鍗曢€夋嫨 `1` 鍚庯紝鑴氭湰鍐呴儴浼氳嚜鍔ㄤ覆鑱旀墽琛屼互涓?9 涓樁娈碉細
 
-## 维护命令
+1. **鐜涓庝緷璧栧畨瑁?*锛氳嚜鍔ㄦ娴嬬郴缁熸灦鏋勶紙AMD64/ARM64锛変笌鍖呯鐞嗗櫒锛岄潤榛樺畨瑁?`curl`銆乣jq`銆乣socat`銆乣qrencode`銆乣cron` 绛夊熀纭€渚濊禆銆?2. **绔彛鍐茬獊鎺掓煡**锛氫富鍔ㄦ娴?80 涓?443 绔彛鏄惁琚崰鐢紝鑻ヨ鍗犵敤浼氬弸濂芥彁绀虹敤鎴风‘璁ゆ槸鍚︽竻鐞嗭紝闃叉瀹夎鍗婇€斿け璐ャ€?3. **鍐呮牳鍙傛暟璋冧紭**锛氭娴嬪簳灞傝櫄鎷熷寲鐜锛岃嫢涓?KVM 鐗╃悊鏋舵瀯鍒欒嚜鍔ㄥ紑鍚?BBR 鎷ュ鎺у埗骞舵斁寮€ 64MB 绯荤粺缂撳啿鍖猴紱鑻ヤ负瀹瑰櫒鍒欎紭闆呰烦杩囥€?4. **鏍稿績浜岃繘鍒舵媺鍙?*锛氭棤闄愰€熻拷韪?GitHub 鏈€鏂扮ǔ瀹?Release锛屼笅杞藉畼鏂规牳蹇冨寘骞堕€氳繃涓ユ牸鐨?SHA256 瀹屾暣鎬ф牎楠岋紝瑙ｅ帇閮ㄧ讲銆?5. **DNS 棰勬涓?SSL 璇佷功鐢宠**锛氶€氳繃 DoH 棰勬鍩熷悕瑙ｆ瀽鐘舵€侊紝闃茶寖 IPv6 闄烽槺锛涗娇鐢?`acme.sh` 鑷姩鍚?Let's Encrypt 绛惧彂 ECC-256 寮哄姞瀵嗚瘉涔︺€?6. **鑷€傚簲閰嶇疆鏂囦欢鐢熸垚**锛氳嚜鍔ㄧ敓鎴愰珮寮哄害闅忔満瀵嗙爜涓?Hysteria2 鐙珛绔彛锛屼娇鐢?`jq` 绮惧噯鏋勫缓鍖呭惈 NaiveProxy 涓?Hysteria2 鐨?`config.json`锛屾潈闄愰攣瀹氫负 `600`銆?7. **鍏ㄦ爤鍙屽崗璁槻鐏鏀捐**锛氬悓姝ユ斁琛?UFW / Firewalld / iptables / ip6tables 鐨?80銆?43銆丠y2 绔彛锛屽苟璁剧疆寮€鏈鸿嚜鍔ㄦ寔涔呭寲鐢熸晥銆?8. **瀹夊叏闅旂涓庢湇鍔℃媺璧?*锛氳嚜鍔ㄥ垱寤轰笓鐢ㄧ殑绯荤粺鏃犵壒鏉冪敤鎴?`sing-box`锛屽垎閰?Linux Capabilities 缁戝畾浣庝綅 443 绔彛锛涢€氳繃 `sing-box check` 鏍￠獙閰嶇疆鏃犺鍚庡惎鍔ㄦ湇鍔″苟璁剧疆寮€鏈鸿嚜鍚€?9. **鑷姩娉ㄥ唽蹇嵎鍛戒护涓庤緭鍑虹粨鏋?*锛氳嚜鍔ㄥ皢鑴氭湰鑷韩閮ㄧ讲涓哄叏灞€鍛戒护 `nb`锛涙竻灞忚緭鍑鸿妭鐐?Universal 瀵煎叆閾炬帴銆丆lash Meta YAML 閰嶇疆鍙?Shadowrocket 缁堢浜岀淮鐮併€?
+---
 
-- **快捷菜单**: 输入 `nb` 即可再次进入脚本管理菜单。
-- **实时日志**: `journalctl -u sing-box -f`
-- **重启服务**: `systemctl restart sing-box`
+## 馃洜锔?绠＄悊鑿滃崟鍔熻兘
 
-## GitHub 仓库
-[https://github.com/TrojanFish/SingboxNaiveProxy](https://github.com/TrojanFish/SingboxNaiveProxy)
+瀹夎瀹屾垚鍚庯紝鍦ㄧ粓绔换鎰忎綅缃緭鍏ュ揩鎹峰懡浠ゅ嵆鍙殢鏃跺敜鍑虹鐞嗛潰鏉匡紙宸插叏闈㈤€傞厤绠￠亾瀹夎锛屾潨缁濈┖鏂囦欢鍋囨锛夛細
+
+```bash
+nb
+```
+
+鑿滃崟鍔熻兘閫夐」涓€瑙堬細
+
+| 閫夐」 | 鍔熻兘 | 鎻忚堪 |
+| :---: | :--- | :--- |
+| **1** | 瀹夎 / 閲嶆柊瀹夎 | 鑷姩鍖栧畬鎴愪緷璧栧畨瑁呫€佺鍙ｆ鏌ャ€佸唴鏍歌皟浼樸€佹牳蹇冩牎楠屻€丼SL 鐢宠涓庨厤缃瀯寤?|
+| **2** | 鏌ョ湅鑺傜偣閰嶇疆涓庨摼鎺?| 杈撳嚭 Universal 瀵煎叆閾炬帴銆佷簩缁寸爜鍙?Clash Meta (Mihomo) YAML 鑺傜偣閰嶇疆 |
+| **3** | 閲嶅惎鏈嶅姟 | 蹇€熷钩婊戦噸鍚?Sing-box 绯荤粺瀹堟姢杩涚▼ |
+| **4** | 鏌ョ湅瀹炴椂鏃ュ織 | 瀹炴椂鏌ョ湅 Sing-box 鏍稿績鏈€鏂拌緭鍑烘棩蹇楋紙30 琛岋級 |
+| **5** | 搴旂敤鍐呮牳涓?BBR 浼樺寲 | 鐙珛閰嶇疆 BBR 鍙?UDP 缂撳啿鍖虹郴缁熷弬鏁帮紙鏀寔瀹瑰櫒鐜鑷€傚簲锛?|
+| **6** | 褰诲簳鍗歌浇 | 鍋滄骞剁Щ闄ゆ湇鍔°€佷簩杩涘埗鏂囦欢銆佽嚜鍔ㄥ洖婊氭竻鐞嗛槻鐏瑙勫垯骞跺彲閫夋竻鐞嗚瘉涔?|
+| **7** | 淇敼鑺傜偣鍑瘉 | 蹇€熶慨鏀?NaiveProxy 鐢ㄦ埛鍚?瀵嗙爜鍙?Hysteria2 杩炴帴瀵嗙爜 |
+| **8** | 閰嶇疆 Hysteria2 楂樼骇椤?| 鑷畾涔?HTTP 浼绔欑偣銆侀厤缃?UDP 绔彛璺宠穬鑼冨洿鍙?Brutal 閫熺巼涓婇檺 |
+| **9** | 绠＄悊 Cloudflare WARP | 瀹樻柟 API 娉ㄥ唽銆佸垏鎹㈠嚭鍙?IP 鍋忓ソ (IPv6/IPv4/鍙屾爤鑷€傚簲)銆佺Щ闄?WARP |
+| **10** | 浠呭崌绾?Sing-box 鏍稿績 | 鑷姩鎷夊彇鏈€鏂?Release 鏍稿績浜岃繘鍒跺苟鎵ц SHA256 鏍￠獙鏇存柊 |
+| **0** | 閫€鍑虹鐞嗚剼鏈?| 閫€鍑轰氦浜掕彍鍗?|
+
+---
+
+## 馃摫 瀹㈡埛绔厤缃笌浣跨敤
+
+杩愯鑿滃崟閫夐」 **`2`** 鍙互闅忔椂鏌ョ湅瀹屾暣鐨勮妭鐐逛俊鎭€佸垎浜摼鎺ャ€佷簩缁寸爜浠ュ強 Clash Meta 鑺傜偣浠ｇ爜銆?
+### 1. NaiveProxy
+- **閫氱敤瀹㈡埛绔?*锛氭敮鎸?[v2rayN](https://github.com/2dust/v2rayN)銆乕NekoBox](https://github.com/MatsuriDayo/nekoray)銆乕Sing-box](https://github.com/SagerNet/sing-box) 绛夈€傜洿鎺ュ鍏ヨ剼鏈緭鍑虹殑 `https://...` 閾炬帴鍗冲彲銆?- **Shadowrocket (灏忕伀绠?**锛?  - 绫诲瀷锛歚HTTPS`
+  - 鏈嶅姟鍣細鎮ㄧ殑鍩熷悕
+  - 绔彛锛歚443`
+  - 鐢ㄦ埛鍚?瀵嗙爜锛氭牴鎹畨瑁呰緭鍑烘垨閫夐」 7 鏌ョ湅
+  - ALPN锛歚h2`
+
+### 2. Hysteria2
+- **閫氱敤閾炬帴**锛氫娇鐢?`hysteria2://` 鏍囧噯 URI 鏍煎紡锛屾敮鎸佸ぇ閮ㄥ垎鐜颁唬瀹㈡埛绔竴閿鍏ャ€?- **Clash Meta (Mihomo)**锛氳剼鏈彁渚涗簡寮€绠卞嵆鐢ㄧ殑 YAML 鑺傜偣浠ｇ爜鍧楋紝澶嶅埗鍒颁唬鐞嗛厤缃枃浠跺嵆鍙娇鐢ㄣ€?- **绔彛璺宠穬浣跨敤**锛氳嫢寮€鍚簡 UDP 绔彛璺宠穬锛堜緥濡?`20000-50000`锛夛紝鍦ㄥ鎴风绔彛璁剧疆澶勫～鍐欏搴旇烦璺冭寖鍥达紙Clash Meta 濉叆 `ports: 20000-50000`锛夛紝鍗冲彲鑷姩杞崲瑙勯伩杩愯惀鍟?QoS銆?
+---
+
+## 鉂?甯歌闂涓庢帓鏌ユ寚鍗?
+1. **鍩熷悕瑙ｆ瀽涓?Cloudflare 璁剧疆**锛?   - 浣跨敤 NaiveProxy 蹇呴』鎷ユ湁涓€涓В鏋愯嚦 VPS 鐨勫煙鍚嶃€?   - 鑻ヤ娇鐢?Cloudflare 瑙ｆ瀽鍩熷悕锛?*浠ｇ悊鐘舵€佸繀椤昏缃负鈥滀粎闄?DNS鈥濓紙鐏拌壊浜戞湹锛?*锛屽垏鍕垮紑鍚?CDN 浠ｇ悊锛堟鑹蹭簯鏈碉級銆?   - **IPv6 鎻愮ず**锛氳嫢鏈嶅姟鍣ㄦ病鏈夊垎閰嶇嫭绔嬬殑鍏綉 IPv6锛岃涓嶈鍦?DNS 澶勬坊鍔?AAAA 璁板綍锛屽惁鍒?Let's Encrypt 浼樺厛楠岃瘉 IPv6 浼氬鑷寸敵璇峰け璐ャ€?2. **浜戞湇鍔″晢鍚庡彴瀹夊叏缁?/ 闃茬伀澧欏紑鏀剧鍙?*锛?   - **TCP 80**锛歀et's Encrypt 璇佷功鍒濇鐢宠涓庨獙璇併€?   - **TCP 443** & **UDP 443**锛歂aiveProxy 涓?HTTPS/QUIC 娴侀噺銆?   - **UDP [鑷畾涔夌鍙**锛欻ysteria2 鐩戝惉绔彛锛堥粯璁ら殢鏈虹敓鎴愶紝鍙嚜瀹氫箟锛夈€?   - **UDP [璺宠穬绔彛鑼冨洿]**锛氳嫢寮€鍚簡绔彛璺宠穬锛堝 `20000:50000`锛夛紝鍔″繀鍦ㄤ簯鍚庡彴寮€鏀炬鑼冨洿鐨?UDP 瑙勫垯銆?3. **鏌ョ湅瀹屾暣鏈嶅姟鏃ュ織**锛?   ```bash
+   journalctl -u sing-box -f -o cat
+   ```
+4. **鏈嶅姟杩愯鐘舵€佽嚜妫€**锛?   ```bash
+   systemctl status sing-box
+   ```
+
+---
+
+## 馃摐 缁存姢涓庡紑婧?
+- **GitHub 浠撳簱**锛歔https://github.com/TrojanFish/SingboxNaiveProxy](https://github.com/TrojanFish/SingboxNaiveProxy)
+- **鍗忚瀹樻柟鏂囨。**锛歔Sing-box Documentation](https://sing-box.sagernet.org/)
