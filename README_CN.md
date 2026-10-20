@@ -102,7 +102,8 @@ nb
 | **7** | 修改节点凭证 | 快速修改 NaiveProxy 用户名/密码及 Hysteria2 连接密码 |
 | **8** | 配置 Hysteria2 高级项 | 自定义 HTTP 伪装站点、配置 UDP 端口跳跃范围及 Brutal 速率上限 |
 | **9** | 管理 Cloudflare WARP | 官方 API 注册、切换出口 IP 偏好 (IPv6/IPv4/双栈自适应)、移除 WARP |
-| **10** | 仅升级 Sing-box 核心 | 自动拉取最新 Release 核心二进制并执行 SHA256 校验更新 |
+| **10** | 仅升级 Sing-box 核心 | 升级 Sing-box 核心（同步升级内置的 NaiveProxy 与 Hysteria2 协议栈） |
+| **11** | 切换界面语言 | 在简体中文与 English 之间一键切换（配置自动持久化保存） |
 | **0** | 退出管理脚本 | 退出交互菜单 |
 
 ---

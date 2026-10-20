@@ -104,7 +104,8 @@ nb
 | **7** | Modify Credentials | Update NaiveProxy username/password and Hysteria2 connection password |
 | **8** | Configure Hysteria2 Advanced | Change HTTP masquerade site, configure UDP port hopping ranges, and set Brutal bandwidth limits |
 | **9** | Manage Cloudflare WARP | Register official API account, toggle outbound IP preference (IPv6/IPv4/Auto), or remove WARP |
-| **10** | Update Sing-box Core Only | Fetch latest stable release binary with strict SHA256 checksum verification |
+| **10** | Update Sing-box Core Only | Fetch and verify latest Sing-box core (syncs built-in NaiveProxy & Hysteria2 stacks) |
+| **11** | Switch Language | Toggle interface language between English and Simplified Chinese (persisted) |
 | **0** | Exit | Exit the management script |
 
 ---

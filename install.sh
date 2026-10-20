@@ -1,6 +1,6 @@
-﻿#!/bin/bash
+#!/bin/bash
 # ==============================================================================
-# Sing-box (NaiveProxy + Hysteria2 + WARP) Ultimate Manager (Optimized Edition)
+# Sing-box (NaiveProxy + Hysteria2 + WARP) Ultimate Manager (Bilingual Edition)
 # ==============================================================================
 
 # Colors
@@ -16,6 +16,7 @@ PLAIN='\033[0m'
 CONFIG_DIR="/etc/sing-box"
 CONFIG_FILE="${CONFIG_DIR}/config.json"
 WARP_CONF="${CONFIG_DIR}/warp.json"
+LANG_FILE="${CONFIG_DIR}/lang"
 CERT_DIR="${CONFIG_DIR}/certs"
 SERVICE_FILE="/etc/systemd/system/sing-box.service"
 BIN_PATH="/usr/local/bin/sing-box"
@@ -24,6 +25,7 @@ SYSCTL_FILE="/etc/sysctl.d/99-singbox.conf"
 REMOTE_SCRIPT_URL="https://raw.githubusercontent.com/TrojanFish/SingboxNaiveProxy/main/install.sh"
 
 # Cached Runtime Variables
+CURRENT_LANG="zh"
 CACHED_IPV4=""
 CACHED_IPV6=""
 CACHED_LAT_V=""
@@ -32,9 +34,71 @@ PM=""
 
 # Check Root
 if [[ $EUID -ne 0 ]]; then
-    echo -e "${RED}Error: This script must be run as root!${PLAIN}"
+    echo -e "${RED}Error: This script must be run as root! / 错误: 必须以 root 权限运行此脚本！${PLAIN}"
     exit 1
 fi
+
+# ----------------- Multi-language (i18n) Initialization -----------------
+
+init_lang() {
+    if [[ -f "$LANG_FILE" ]]; then
+        CURRENT_LANG=$(cat "$LANG_FILE" 2>/dev/null | tr -d '[:space:]')
+        [[ "$CURRENT_LANG" != "en" && "$CURRENT_LANG" != "zh" ]] && CURRENT_LANG="zh"
+    else
+        if [[ -t 0 ]]; then
+            echo -e "${CYAN}=============================================================${PLAIN}"
+            echo -e "${CYAN} Please select language / 请选择界面语言:${PLAIN}"
+            echo -e "   ${YELLOW}1.${PLAIN} 简体中文 (Chinese) [默认 / Default]"
+            echo -e "   ${YELLOW}2.${PLAIN} English"
+            echo -e "${CYAN}=============================================================${PLAIN}"
+            read -rp " Select / 请选择 [1-2, default: 1]: " init_l
+            init_l=$(echo "$init_l" | tr -d '\r' | tr -d ' ')
+            case "$init_l" in
+                2) CURRENT_LANG="en" ;;
+                *) CURRENT_LANG="zh" ;;
+            esac
+        else
+            if [[ "${LANG:-}" =~ zh|CN ]] || [[ "${LC_ALL:-}" =~ zh|CN ]]; then
+                CURRENT_LANG="zh"
+            else
+                CURRENT_LANG="zh"
+            fi
+        fi
+        mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+        echo "$CURRENT_LANG" > "$LANG_FILE" 2>/dev/null || true
+    fi
+}
+
+switch_language() {
+    echo ""
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}请选择界面语言 / Select Language:${PLAIN}"
+        echo -e "  1. 简体中文 (当前)"
+        echo -e "  2. English"
+        read -rp "请选择 [1-2]: " l_ch
+    else
+        echo -e "${YELLOW}Select Language / 请选择界面语言:${PLAIN}"
+        echo -e "  1. 简体中文"
+        echo -e "  2. English (Current)"
+        read -rp "Select [1-2]: " l_ch
+    fi
+
+    l_ch=$(echo "$l_ch" | tr -d '\r' | tr -d ' ')
+    case "$l_ch" in
+        2) CURRENT_LANG="en" ;;
+        1) CURRENT_LANG="zh" ;;
+        *) return ;;
+    esac
+
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+    echo "$CURRENT_LANG" > "$LANG_FILE" 2>/dev/null || true
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${GREEN}已切换为简体中文！${PLAIN}"
+    else
+        echo -e "${GREEN}Language switched to English!${PLAIN}"
+    fi
+    sleep 1
+}
 
 # ----------------- Environment & Cache Initialization -----------------
 
@@ -45,7 +109,14 @@ detect_env() {
         x86_64|amd64) ARCH="amd64" ;;
         aarch64|arm64) ARCH="arm64" ;;
         armv7l) ARCH="armv7" ;;
-        *) echo -e "${RED}Unsupported architecture: $arch_raw${PLAIN}"; exit 1 ;;
+        *)
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${RED}不支持的系统架构: $arch_raw${PLAIN}"
+            else
+                echo -e "${RED}Unsupported architecture: $arch_raw${PLAIN}"
+            fi
+            exit 1
+            ;;
     esac
 
     if command -v apt-get >/dev/null 2>&1; then
@@ -55,7 +126,11 @@ detect_env() {
     elif command -v yum >/dev/null 2>&1; then
         PM="yum"
     else
-        echo -e "${RED}Unsupported Linux distribution package manager!${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}不支持的 Linux 发行版包管理器！${PLAIN}"
+        else
+            echo -e "${RED}Unsupported Linux distribution package manager!${PLAIN}"
+        fi
         exit 1
     fi
 }
@@ -115,11 +190,19 @@ validate_port_range() {
     local start="$1"
     local end="$2"
     if [[ ! "$start" =~ ^[0-9]+$ || ! "$end" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}Error: Ports must be pure numbers!${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}错误: 端口必须为纯数字！${PLAIN}"
+        else
+            echo -e "${RED}Error: Ports must be pure numbers!${PLAIN}"
+        fi
         return 1
     fi
     if (( start < 1024 || end > 65535 || start >= end )); then
-        echo -e "${RED}Error: Invalid port range! Must satisfy 1024 <= Start < End <= 65535.${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}错误: 端口范围无效！必须满足 1024 <= 起始端口 < 结束端口 <= 65535。${PLAIN}"
+        else
+            echo -e "${RED}Error: Invalid port range! Must satisfy 1024 <= Start < End <= 65535.${PLAIN}"
+        fi
         return 1
     fi
     return 0
@@ -128,7 +211,11 @@ validate_port_range() {
 # ----------------- System & Dependency Setup -----------------
 
 install_dependencies() {
-    echo -e "${YELLOW}Installing system dependencies...${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}正在安装系统依赖...${PLAIN}"
+    else
+        echo -e "${YELLOW}Installing system dependencies...${PLAIN}"
+    fi
     if [[ "$PM" == "apt" ]]; then
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -y >/dev/null 2>&1
@@ -139,7 +226,11 @@ install_dependencies() {
         $PM install -y curl wget jq tar openssl socat cronie qrencode lsof iproute ca-certificates >/dev/null 2>&1
         systemctl enable --now crond >/dev/null 2>&1
     fi
-    echo -e "${GREEN}Dependencies installed.${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${GREEN}系统依赖安装完成。${PLAIN}"
+    else
+        echo -e "${GREEN}Dependencies installed.${PLAIN}"
+    fi
 }
 
 check_ports() {
@@ -156,14 +247,27 @@ check_ports() {
             local pname
             pname=$(ps -p "$pid" -o comm= 2>/dev/null)
             if [[ "$pname" != "sing-box" && -n "$pname" ]]; then
-                echo -e "${YELLOW}Warning: Port $port is currently occupied by $pname (PID: $pid).${PLAIN}"
-                read -rp "Do you want to terminate this process and continue? [y/N]: " kill_it
+                if [[ "$CURRENT_LANG" == "zh" ]]; then
+                    echo -e "${YELLOW}警告: 端口 $port 当前被进程 $pname (PID: $pid) 占用。${PLAIN}"
+                    read -rp "是否强制终止该进程并继续安装？ [y/N]: " kill_it
+                else
+                    echo -e "${YELLOW}Warning: Port $port is currently occupied by $pname (PID: $pid).${PLAIN}"
+                    read -rp "Do you want to terminate this process and continue? [y/N]: " kill_it
+                fi
                 if [[ "$kill_it" =~ ^[Yy]$ ]]; then
                     kill -9 "$pid" 2>/dev/null
                     sleep 1
-                    echo -e "${GREEN}Process $pname (PID: $pid) terminated.${PLAIN}"
+                    if [[ "$CURRENT_LANG" == "zh" ]]; then
+                        echo -e "${GREEN}进程 $pname (PID: $pid) 已终止。${PLAIN}"
+                    else
+                        echo -e "${GREEN}Process $pname (PID: $pid) terminated.${PLAIN}"
+                    fi
                 else
-                    echo -e "${RED}Operation aborted by user.${PLAIN}"
+                    if [[ "$CURRENT_LANG" == "zh" ]]; then
+                        echo -e "${RED}用户已取消操作。${PLAIN}"
+                    else
+                        echo -e "${RED}Operation aborted by user.${PLAIN}"
+                    fi
                     return 1
                 fi
             fi
@@ -173,15 +277,24 @@ check_ports() {
 }
 
 optimize_system() {
-    echo -e "${YELLOW}Optimizing kernel parameters (BBR & QUIC/UDP buffers)...${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}正在优化内核网络参数 (BBR 与 QUIC/UDP 缓冲区)...${PLAIN}"
+    else
+        echo -e "${YELLOW}Optimizing kernel parameters (BBR & QUIC/UDP buffers)...${PLAIN}"
+    fi
     local virt=""
     if command -v systemd-detect-virt >/dev/null 2>&1; then
         virt=$(systemd-detect-virt 2>/dev/null)
     fi
 
     if [[ "$virt" =~ ^(lxc|openvz|docker|podman|container) ]]; then
-        echo -e "${YELLOW}Container virtualization (${virt}) detected.${PLAIN}"
-        echo -e "${YELLOW}Kernel sysctl parameter tuning skipped (managed by host node).${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${YELLOW}检测到容器虚拟化环境 (${virt})。${PLAIN}"
+            echo -e "${YELLOW}已自动跳过内核 sysctl 参数调优（由宿主机统一管理）。${PLAIN}"
+        else
+            echo -e "${YELLOW}Container virtualization (${virt}) detected.${PLAIN}"
+            echo -e "${YELLOW}Kernel sysctl parameter tuning skipped (managed by host node).${PLAIN}"
+        fi
         return 0
     fi
 
@@ -202,9 +315,17 @@ net.ipv4.tcp_slow_start_after_idle=0
 net.ipv4.tcp_notsent_lowat=16384
 EOF
     if sysctl --system >/dev/null 2>&1; then
-        echo -e "${GREEN}System parameters optimized!${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${GREEN}系统内核网络参数优化完成！${PLAIN}"
+        else
+            echo -e "${GREEN}System parameters optimized!${PLAIN}"
+        fi
     else
-        echo -e "${YELLOW}Notice: Kernel parameters applied with minor warnings.${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${YELLOW}提示: 内核参数已应用，但存在部分告警。${PLAIN}"
+        else
+            echo -e "${YELLOW}Notice: Kernel parameters applied with minor warnings.${PLAIN}"
+        fi
     fi
 }
 
@@ -219,31 +340,55 @@ install_singbox() {
     local filename="sing-box-${clean_ver}-linux-${ARCH}.tar.gz"
     local base_url="https://github.com/SagerNet/sing-box/releases/download/${target_ver}"
 
-    echo -e "${YELLOW}Downloading Sing-box ${target_ver} (${ARCH})...${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}正在下载 Sing-box ${target_ver} (${ARCH})...${PLAIN}"
+    else
+        echo -e "${YELLOW}Downloading Sing-box ${target_ver} (${ARCH})...${PLAIN}"
+    fi
     local tmp_dir
     tmp_dir=$(mktemp -d)
 
     if ! wget -q --show-progress -O "${tmp_dir}/${filename}" "${base_url}/${filename}"; then
-        echo -e "${RED}Failed to download Sing-box binary! Check network connectivity.${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}下载 Sing-box 核心失败！请检查 VPS 网络连接。${PLAIN}"
+        else
+            echo -e "${RED}Failed to download Sing-box binary! Check network connectivity.${PLAIN}"
+        fi
         rm -rf "$tmp_dir"
         return 1
     fi
 
     # Strict SHA256 Checksum Verification
     if wget -q -O "${tmp_dir}/checksums.txt" "${base_url}/checksums.txt" 2>/dev/null && [[ -s "${tmp_dir}/checksums.txt" ]]; then
-        echo -e "${CYAN}Verifying SHA256 checksum...${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${CYAN}正在校验 SHA256 完整性...${PLAIN}"
+        else
+            echo -e "${CYAN}Verifying SHA256 checksum...${PLAIN}"
+        fi
         if ! (
             set -eo pipefail
             cd "$tmp_dir"
             grep -F " ${filename}" checksums.txt | sha256sum -c --status -
         ); then
-            echo -e "${RED}SHA256 checksum verification failed! Aborting installation.${PLAIN}"
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${RED}SHA256 校验和不匹配！终止安装。${PLAIN}"
+            else
+                echo -e "${RED}SHA256 checksum verification failed! Aborting installation.${PLAIN}"
+            fi
             rm -rf "$tmp_dir"
             return 1
         fi
-        echo -e "${GREEN}SHA256 checksum verified.${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${GREEN}SHA256 校验通过。${PLAIN}"
+        else
+            echo -e "${GREEN}SHA256 checksum verified.${PLAIN}"
+        fi
     else
-        echo -e "${YELLOW}Warning: Could not fetch checksums.txt, skipping SHA256 verification.${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${YELLOW}警告: 未能获取 checksums.txt，跳过 SHA256 校验。${PLAIN}"
+        else
+            echo -e "${YELLOW}Warning: Could not fetch checksums.txt, skipping SHA256 verification.${PLAIN}"
+        fi
     fi
 
     tar -zxf "${tmp_dir}/${filename}" -C "$tmp_dir"
@@ -261,7 +406,11 @@ install_singbox() {
 
     mkdir -p "$CONFIG_DIR" "$CERT_DIR"
     rm -rf "$tmp_dir"
-    echo -e "${GREEN}Sing-box ${target_ver} installed to ${BIN_PATH}.${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${GREEN}Sing-box ${target_ver} 已成功安装到 ${BIN_PATH}。${PLAIN}"
+    else
+        echo -e "${GREEN}Sing-box ${target_ver} installed to ${BIN_PATH}.${PLAIN}"
+    fi
     return 0
 }
 
@@ -269,7 +418,11 @@ install_singbox() {
 
 verify_domain_dns() {
     local domain="$1"
-    echo -e "${CYAN}Pre-checking DNS resolution for ${domain}...${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${CYAN}正在预检域名 ${domain} 的 DNS 解析...${PLAIN}"
+    else
+        echo -e "${CYAN}Pre-checking DNS resolution for ${domain}...${PLAIN}"
+    fi
     local resolved_ipv4 resolved_ipv6
     resolved_ipv4=$(curl -s4m 4 "https://1.1.1.1/dns-query?name=${domain}&type=A" -H 'accept: application/dns-json' 2>/dev/null | jq -r '.Answer[]? | select(.type==1) | .data' 2>/dev/null | head -n 1)
     resolved_ipv6=$(curl -s4m 4 "https://1.1.1.1/dns-query?name=${domain}&type=AAAA" -H 'accept: application/dns-json' 2>/dev/null | jq -r '.Answer[]? | select(.type==28) | .data' 2>/dev/null | head -n 1)
@@ -279,22 +432,43 @@ verify_domain_dns() {
         resolved_ipv6=$(getent ahostsv6 "$domain" 2>/dev/null | awk '{print $1}' | head -n 1)
     fi
 
-    echo -e "  - Resolved IPv4: ${resolved_ipv4:-None}"
-    echo -e "  - Server   IPv4: ${CACHED_IPV4:-N/A}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "  - 解析 IPv4: ${resolved_ipv4:-无}"
+        echo -e "  - 本机 IPv4: ${CACHED_IPV4:-未知}"
+    else
+        echo -e "  - Resolved IPv4: ${resolved_ipv4:-None}"
+        echo -e "  - Server   IPv4: ${CACHED_IPV4:-N/A}"
+    fi
 
     if [[ -n "$resolved_ipv4" && "$CACHED_IPV4" != "N/A" && "$resolved_ipv4" != "$CACHED_IPV4" ]]; then
-        echo -e "${YELLOW}Warning: Domain resolved IPv4 ($resolved_ipv4) does not match server public IP ($CACHED_IPV4)!${PLAIN}"
-        read -rp "Are you sure you want to proceed with certificate issuance? [y/N]: " force_dns
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${YELLOW}警告: 域名解析的 IPv4 ($resolved_ipv4) 与服务器公网 IP ($CACHED_IPV4) 不一致！${PLAIN}"
+            read -rp "确定要强制继续申请证书吗？ [y/N]: " force_dns
+        else
+            echo -e "${YELLOW}Warning: Domain resolved IPv4 ($resolved_ipv4) does not match server public IP ($CACHED_IPV4)!${PLAIN}"
+            read -rp "Are you sure you want to proceed with certificate issuance? [y/N]: " force_dns
+        fi
         [[ ! "$force_dns" =~ ^[Yy]$ ]] && return 1
     fi
 
     if [[ -n "$resolved_ipv6" ]]; then
-        echo -e "  - Resolved IPv6: ${resolved_ipv6}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "  - 解析 IPv6: ${resolved_ipv6}"
+        else
+            echo -e "  - Resolved IPv6: ${resolved_ipv6}"
+        fi
         if [[ "$CACHED_IPV6" == "N/A" || -z "$CACHED_IPV6" ]]; then
-            echo -e "${RED}Caution: Domain has an AAAA (IPv6) record, but this server has no working public IPv6!${PLAIN}"
-            echo -e "${YELLOW}Let's Encrypt validates IPv6 first and will likely fail.${PLAIN}"
-            echo -e "${YELLOW}Tip: Remove the AAAA record in your DNS provider before continuing.${PLAIN}"
-            read -rp "Proceed anyway? [y/N]: " force_v6
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${RED}注意: 域名配置了 AAAA (IPv6) 解析记录，但当前服务器无公网 IPv6！${PLAIN}"
+                echo -e "${YELLOW}Let's Encrypt 会优先验证 IPv6，极大概率导致证书申请失败。${PLAIN}"
+                echo -e "${YELLOW}建议: 请在 DNS 域名解析处先删除 AAAA (IPv6) 记录后再继续。${PLAIN}"
+                read -rp "仍然强制继续？ [y/N]: " force_v6
+            else
+                echo -e "${RED}Caution: Domain has an AAAA (IPv6) record, but this server has no working public IPv6!${PLAIN}"
+                echo -e "${YELLOW}Let's Encrypt validates IPv6 first and will likely fail.${PLAIN}"
+                echo -e "${YELLOW}Tip: Remove the AAAA record in your DNS provider before continuing.${PLAIN}"
+                read -rp "Proceed anyway? [y/N]: " force_v6
+            fi
             [[ ! "$force_v6" =~ ^[Yy]$ ]] && return 1
         fi
     fi
@@ -302,21 +476,41 @@ verify_domain_dns() {
 }
 
 setup_ssl() {
-    echo -e "${YELLOW}Configuring SSL Certificate...${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}正在配置 SSL 证书...${PLAIN}"
+    else
+        echo -e "${YELLOW}Configuring SSL Certificate...${PLAIN}"
+    fi
     load_existing_config
 
     if [[ -z "$DOMAIN" ]]; then
-        read -rp "Enter your domain name (must point to this server IP): " DOMAIN
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            read -rp "请输入您的域名 (必须已通过 DNS 解析到本机 IP): " DOMAIN
+        else
+            read -rp "Enter your domain name (must point to this server IP): " DOMAIN
+        fi
     else
-        echo -e "${CYAN}Current configured domain: ${DOMAIN}${PLAIN}"
-        read -rp "Keep using this domain? [Y/n]: " keep_dom
-        if [[ "$keep_dom" =~ ^[Nn]$ ]]; then
-            read -rp "Enter new domain name: " DOMAIN
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${CYAN}当前已配置的域名: ${DOMAIN}${PLAIN}"
+            read -rp "是否继续使用此域名？ [Y/n]: " keep_dom
+            if [[ "$keep_dom" =~ ^[Nn]$ ]]; then
+                read -rp "请输入新域名: " DOMAIN
+            fi
+        else
+            echo -e "${CYAN}Current configured domain: ${DOMAIN}${PLAIN}"
+            read -rp "Keep using this domain? [Y/n]: " keep_dom
+            if [[ "$keep_dom" =~ ^[Nn]$ ]]; then
+                read -rp "Enter new domain name: " DOMAIN
+            fi
         fi
     fi
 
     if [[ -z "$DOMAIN" ]]; then
-        echo -e "${RED}Error: Domain name cannot be empty!${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}错误: 域名不能为空！${PLAIN}"
+        else
+            echo -e "${RED}Error: Domain name cannot be empty!${PLAIN}"
+        fi
         return 1
     fi
 
@@ -326,7 +520,11 @@ setup_ssl() {
 
     local acme_bin="$HOME/.acme.sh/acme.sh"
     if [[ ! -f "$acme_bin" ]]; then
-        echo -e "${YELLOW}Installing acme.sh safely...${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${YELLOW}正在安全安装 acme.sh...${PLAIN}"
+        else
+            echo -e "${YELLOW}Installing acme.sh safely...${PLAIN}"
+        fi
         local acme_installer
         acme_installer=$(mktemp)
         if curl --proto '=https' --tlsv1.2 -fsSL https://get.acme.sh -o "$acme_installer" && [[ -s "$acme_installer" ]]; then
@@ -334,7 +532,11 @@ setup_ssl() {
             rm -f "$acme_installer"
         else
             rm -f "$acme_installer"
-            echo -e "${RED}Error: Failed to download acme.sh installer securely!${PLAIN}"
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${RED}错误: 安全下载 acme.sh 安装脚本失败！${PLAIN}"
+            else
+                echo -e "${RED}Error: Failed to download acme.sh installer securely!${PLAIN}"
+            fi
             return 1
         fi
     fi
@@ -343,13 +545,25 @@ setup_ssl() {
     "$acme_bin" --set-default-ca --server letsencrypt >/dev/null 2>&1
 
     if [[ ! -f "$HOME/.acme.sh/${DOMAIN}_ecc/fullchain.cer" && ! -f "$HOME/.acme.sh/${DOMAIN}/fullchain.cer" ]]; then
-        echo -e "${YELLOW}Issuing Let's Encrypt ECC certificate for ${DOMAIN}...${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${YELLOW}正在为 ${DOMAIN} 申请 Let's Encrypt ECC 证书...${PLAIN}"
+        else
+            echo -e "${YELLOW}Issuing Let's Encrypt ECC certificate for ${DOMAIN}...${PLAIN}"
+        fi
         if ! "$acme_bin" --issue -d "$DOMAIN" --standalone --keylength ec-256 --force; then
-            echo -e "${RED}SSL issuance failed! Ensure port 80 is open and ${DOMAIN} resolves to ${CACHED_IPV4}.${PLAIN}"
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${RED}SSL 证书申请失败！请确保 80 端口未被占用且已放行，并且 ${DOMAIN} 正确解析到 ${CACHED_IPV4}。${PLAIN}"
+            else
+                echo -e "${RED}SSL issuance failed! Ensure port 80 is open and ${DOMAIN} resolves to ${CACHED_IPV4}.${PLAIN}"
+            fi
             return 1
         fi
     else
-        echo -e "${GREEN}Existing valid certificate found for ${DOMAIN}.${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${GREEN}检测到 ${DOMAIN} 已存在有效证书，跳过重复申请。${PLAIN}"
+        else
+            echo -e "${GREEN}Existing valid certificate found for ${DOMAIN}.${PLAIN}"
+        fi
     fi
 
     mkdir -p "$CERT_DIR"
@@ -360,7 +574,11 @@ setup_ssl() {
 
     chmod 600 "${CERT_DIR}/private.key"
     chmod 644 "${CERT_DIR}/fullchain.pem"
-    echo -e "${GREEN}SSL certificate installed to ${CERT_DIR}.${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${GREEN}SSL 证书已安装至 ${CERT_DIR}。${PLAIN}"
+    else
+        echo -e "${GREEN}SSL certificate installed to ${CERT_DIR}.${PLAIN}"
+    fi
     return 0
 }
 
@@ -384,7 +602,11 @@ apply_ip6tables_rule() {
 }
 
 setup_firewall() {
-    echo -e "${YELLOW}Configuring firewall rules (IPv4 & IPv6)...${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}正在配置防火墙规则 (IPv4 & IPv6)...${PLAIN}"
+    else
+        echo -e "${YELLOW}Configuring firewall rules (IPv4 & IPv6)...${PLAIN}"
+    fi
     load_existing_config
 
     local hy2_p="${HY2_PORT:-443}"
@@ -450,7 +672,11 @@ setup_firewall() {
         fi
     fi
 
-    echo -e "${GREEN}Firewall configured successfully!${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${GREEN}防火墙规则配置成功！${PLAIN}"
+    else
+        echo -e "${GREEN}Firewall configured successfully!${PLAIN}"
+    fi
 }
 
 # Select or switch WARP outbound IP version preference
@@ -460,12 +686,21 @@ select_warp_ip_preference() {
         cur_strat=$(jq -r '.domain_strategy // empty' "$WARP_CONF" 2>/dev/null)
     fi
 
-    echo -e "${YELLOW}--- Cloudflare WARP Outbound IP Preference ---${PLAIN}"
-    echo -e " 1. ${GREEN}IPv6 Preferred (Recommended)${PLAIN} - Cleanest IP for OpenAI, Claude, Google (No Captchas)"
-    echo -e " 2. ${CYAN}IPv4 Preferred${PLAIN} - Best compatibility for legacy streaming services"
-    echo -e " 3. ${YELLOW}Auto (Dual-stack)${PLAIN} - Default DNS resolution without preference"
-    read -rp "Select preference [1-3, default 1]: " pref_choice
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}--- Cloudflare WARP 出站 IP 偏好设置 ---${PLAIN}"
+        echo -e " 1. ${GREEN}IPv6 优先 (极力推荐)${PLAIN} - 针对 OpenAI、Claude、Google 信誉最高 (零验证码)"
+        echo -e " 2. ${CYAN}IPv4 优先${PLAIN} - 对传统流媒体网站兼容性最佳"
+        echo -e " 3. ${YELLOW}自适应 (双栈)${PLAIN} - 默认 DNS 解析，不强制指定偏好"
+        read -rp "请选择出站偏好 [1-3, 默认 1]: " pref_choice
+    else
+        echo -e "${YELLOW}--- Cloudflare WARP Outbound IP Preference ---${PLAIN}"
+        echo -e " 1. ${GREEN}IPv6 Preferred (Recommended)${PLAIN} - Cleanest IP for OpenAI, Claude, Google (No Captchas)"
+        echo -e " 2. ${CYAN}IPv4 Preferred${PLAIN} - Best compatibility for legacy streaming services"
+        echo -e " 3. ${YELLOW}Auto (Dual-stack)${PLAIN} - Default DNS resolution without preference"
+        read -rp "Select preference [1-3, default 1]: " pref_choice
+    fi
 
+    pref_choice=$(echo "$pref_choice" | tr -d '\r' | tr -d ' ')
     local chosen_strategy="prefer_ipv6"
     case "$pref_choice" in
         2) chosen_strategy="prefer_ipv4" ;;
@@ -482,34 +717,61 @@ select_warp_ip_preference() {
 }
 
 setup_warp() {
-    echo -e "${YELLOW}--- Cloudflare WARP Management ---${PLAIN}"
-    if [[ ! -x "$BIN_PATH" || ! -f "$CONFIG_FILE" ]]; then
-        echo -e "${RED}Error: Sing-box is not fully installed! Please run Option 1 first.${PLAIN}"
-        return 1
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}--- Cloudflare WARP 管理 ---${PLAIN}"
+        if [[ ! -x "$BIN_PATH" || ! -f "$CONFIG_FILE" ]]; then
+            echo -e "${RED}错误: Sing-box 尚未完全安装！请先运行选项 1。${PLAIN}"
+            return 1
+        fi
+    else
+        echo -e "${YELLOW}--- Cloudflare WARP Management ---${PLAIN}"
+        if [[ ! -x "$BIN_PATH" || ! -f "$CONFIG_FILE" ]]; then
+            echo -e "${RED}Error: Sing-box is not fully installed! Please run Option 1 first.${PLAIN}"
+            return 1
+        fi
     fi
 
     if [[ -f "$WARP_CONF" ]]; then
         local cur_strat
         cur_strat=$(jq -r '.domain_strategy // empty' "$WARP_CONF" 2>/dev/null)
-        case "$cur_strat" in
-            prefer_ipv6) cur_strat="IPv6 Preferred" ;;
-            prefer_ipv4) cur_strat="IPv4 Preferred" ;;
-            *) cur_strat="Auto (Dual-stack)" ;;
-        esac
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            case "$cur_strat" in
+                prefer_ipv6) cur_strat="IPv6 优先" ;;
+                prefer_ipv4) cur_strat="IPv4 优先" ;;
+                *) cur_strat="自适应 (双栈)" ;;
+            esac
+            echo -e "${GREEN}WARP 当前已启用 (当前出站偏好: ${cur_strat})。${PLAIN}"
+            echo -e " 1. 切换出站 IP 偏好 (IPv6 / IPv4 / 自适应)"
+            echo -e " 2. 重新注册 WARP 账号"
+            echo -e " 3. 停用并移除 WARP"
+            echo -e " 0. 返回"
+            read -rp "请选择操作 [0-3]: " warp_act
+        else
+            case "$cur_strat" in
+                prefer_ipv6) cur_strat="IPv6 Preferred" ;;
+                prefer_ipv4) cur_strat="IPv4 Preferred" ;;
+                *) cur_strat="Auto (Dual-stack)" ;;
+            esac
+            echo -e "${GREEN}WARP is currently active (Current Outbound: ${cur_strat}).${PLAIN}"
+            echo -e " 1. Switch Outbound IP Preference (IPv6 / IPv4 / Auto)"
+            echo -e " 2. Re-register WARP account"
+            echo -e " 3. Disable & remove WARP integration"
+            echo -e " 0. Return"
+            read -rp "Select action [0-3]: " warp_act
+        fi
 
-        echo -e "${GREEN}WARP is currently active (Current Outbound: ${cur_strat}).${PLAIN}"
-        echo -e " 1. Switch Outbound IP Preference (IPv6 / IPv4 / Auto)"
-        echo -e " 2. Re-register WARP account"
-        echo -e " 3. Disable & remove WARP integration"
-        echo -e " 0. Return"
-        read -rp "Select action [0-3]: " warp_act
+        warp_act=$(echo "$warp_act" | tr -d '\r' | tr -d ' ')
         case "$warp_act" in
             1)
                 select_warp_ip_preference
                 load_existing_config
                 generate_config
                 systemctl restart sing-box
-                echo -e "${GREEN}WARP outbound preference updated and Sing-box restarted!${PLAIN}"
+                if [[ "$CURRENT_LANG" == "zh" ]]; then
+                    echo -e "${GREEN}WARP 出站偏好已更新，Sing-box 服务已重启！${PLAIN}"
+                else
+                    echo -e "${GREEN}WARP outbound preference updated and Sing-box restarted!${PLAIN}"
+                fi
                 return 0
                 ;;
             2) rm -f "$WARP_CONF" ;;
@@ -518,14 +780,22 @@ setup_warp() {
                 load_existing_config
                 generate_config
                 systemctl restart sing-box
-                echo -e "${GREEN}WARP removed and Sing-box restarted.${PLAIN}"
+                if [[ "$CURRENT_LANG" == "zh" ]]; then
+                    echo -e "${GREEN}WARP 已移除，Sing-box 服务已重启。${PLAIN}"
+                else
+                    echo -e "${GREEN}WARP removed and Sing-box restarted.${PLAIN}"
+                fi
                 return 0
                 ;;
             *) return 0 ;;
         esac
     fi
 
-    echo -e "${CYAN}Generating WireGuard keypair locally and registering with Cloudflare Official API...${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${CYAN}正在本地生成 WireGuard 密钥对并通过 Cloudflare 官方 API 注册...${PLAIN}"
+    else
+        echo -e "${CYAN}Generating WireGuard keypair locally and registering with Cloudflare Official API...${PLAIN}"
+    fi
     local key_out priv_key pub_key reg_resp v6_addr resv_b64 resv_json
     key_out=$("$BIN_PATH" generate wg-keypair 2>/dev/null)
     priv_key=$(echo "$key_out" | awk '/PrivateKey/ {print $2}')
@@ -550,15 +820,25 @@ setup_warp() {
                 --arg ep "162.159.192.1" \
                 --argjson epport 2408 \
                 '{private_key: $pk, v6: $v6, reserved: $resv, endpoint: $ep, endpoint_port: $epport, domain_strategy: "prefer_ipv6"}' > "$WARP_CONF"
-            echo -e "${GREEN}Successfully registered via Official Cloudflare API!${PLAIN}"
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${GREEN}通过 Cloudflare 官方 API 注册成功！${PLAIN}"
+            else
+                echo -e "${GREEN}Successfully registered via Official Cloudflare API!${PLAIN}"
+            fi
         fi
     fi
 
     # Ask for explicit user consent before falling back to third-party APIs
     if [[ ! -s "$WARP_CONF" ]]; then
-        echo -e "${YELLOW}Warning: Official Cloudflare API registration failed (likely rate-limited).${PLAIN}"
-        echo -e "${RED}Security Notice: Fallback third-party APIs generate the WireGuard private key remotely.${PLAIN}"
-        read -rp "Do you want to use third-party fallback APIs anyway? [y/N]: " allow_fallback
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${YELLOW}警告: 官方 Cloudflare API 注册失败 (可能触发频率限制)。${PLAIN}"
+            echo -e "${RED}安全提示: 备用第三方 API 会在远程生成 WireGuard 私钥。${PLAIN}"
+            read -rp "是否仍要使用备用第三方 API？ [y/N]: " allow_fallback
+        else
+            echo -e "${YELLOW}Warning: Official Cloudflare API registration failed (likely rate-limited).${PLAIN}"
+            echo -e "${RED}Security Notice: Fallback third-party APIs generate the WireGuard private key remotely.${PLAIN}"
+            read -rp "Do you want to use third-party fallback APIs anyway? [y/N]: " allow_fallback
+        fi
         if [[ "$allow_fallback" =~ ^[Yy]$ ]]; then
             local api_list=("https://api.zeroteam.top/warp?format=json" "https://warp-reg.vercel.app/api/reg")
             for api in "${api_list[@]}"; do
@@ -573,7 +853,11 @@ setup_warp() {
     fi
 
     if [[ ! -s "$WARP_CONF" ]]; then
-        echo -e "${RED}Error: WARP registration failed! Check VPS outbound connectivity.${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}错误: WARP 注册失败！请检查 VPS 出站网络连通性。${PLAIN}"
+        else
+            echo -e "${RED}Error: WARP registration failed! Check VPS outbound connectivity.${PLAIN}"
+        fi
         rm -f "$WARP_CONF"
         return 1
     fi
@@ -586,13 +870,21 @@ setup_warp() {
     load_existing_config
     generate_config
     systemctl restart sing-box
-    echo -e "${GREEN}WARP integrated into Sing-box and service restarted!${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${GREEN}WARP 已成功接入 Sing-box，服务已重启！${PLAIN}"
+    else
+        echo -e "${GREEN}WARP integrated into Sing-box and service restarted!${PLAIN}"
+    fi
 }
 
 # ----------------- Configuration Generation (via jq) -----------------
 
 generate_config() {
-    echo -e "${YELLOW}Building Sing-box configuration via jq...${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}正在使用 jq 构建 Sing-box 配置文件...${PLAIN}"
+    else
+        echo -e "${YELLOW}Building Sing-box configuration via jq...${PLAIN}"
+    fi
 
     # Only load from disk if memory variables are unset
     if [[ -z "$DOMAIN" || -z "$NAIVE_USER" ]]; then
@@ -758,9 +1050,17 @@ EOF
         systemctl daemon-reload
         systemctl enable sing-box >/dev/null 2>&1
         systemctl restart sing-box
-        echo -e "${GREEN}Sing-box configuration validated and service started!${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${GREEN}Sing-box 配置校验通过，服务已启动！${PLAIN}"
+        else
+            echo -e "${GREEN}Sing-box configuration validated and service started!${PLAIN}"
+        fi
     else
-        echo -e "${RED}Error: Sing-box configuration validation failed!${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}错误: Sing-box 配置校验失败！${PLAIN}"
+        else
+            echo -e "${RED}Error: Sing-box configuration validation failed!${PLAIN}"
+        fi
         cat /tmp/singbox_check.log
         return 1
     fi
@@ -776,13 +1076,21 @@ EOF
     fi
 
     if [[ $need_download -eq 1 ]]; then
-        echo -e "${CYAN}Installing 'nb' shortcut from remote source...${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${CYAN}正在从远程安装 'nb' 快捷命令...${PLAIN}"
+        else
+            echo -e "${CYAN}Installing 'nb' shortcut from remote source...${PLAIN}"
+        fi
         curl -fsSL "$REMOTE_SCRIPT_URL" -o "$SHORTCUT_BIN" 2>/dev/null || wget -qO "$SHORTCUT_BIN" "$REMOTE_SCRIPT_URL" 2>/dev/null || true
     fi
 
     if [[ -f "$SHORTCUT_BIN" ]]; then
         chmod +x "$SHORTCUT_BIN"
-        echo -e "${CYAN}Shortcut installed! Type 'nb' anytime to open this manager.${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${CYAN}快捷命令已安装！在终端随时输入 'nb' 即可打开此管理菜单。${PLAIN}"
+        else
+            echo -e "${CYAN}Shortcut installed! Type 'nb' anytime to open this manager.${PLAIN}"
+        fi
     fi
 }
 
@@ -790,7 +1098,11 @@ EOF
 
 show_config() {
     if [[ ! -f "$CONFIG_FILE" ]]; then
-        echo -e "${RED}Error: Configuration file not found! Please install first.${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}错误: 未找到配置文件！请先安装。${PLAIN}"
+        else
+            echo -e "${RED}Error: Configuration file not found! Please install first.${PLAIN}"
+        fi
         return 1
     fi
     load_existing_config
@@ -806,20 +1118,39 @@ show_config() {
 
     clear
     echo -e "${PURPLE}=============================================================${PLAIN}"
-    echo -e "${PURPLE}#               CONFIGURATIONS & IMPORT LINKS               #${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${PURPLE}#               节点配置与客户端导入链接                    #${PLAIN}"
+    else
+        echo -e "${PURPLE}#               CONFIGURATIONS & IMPORT LINKS               #${PLAIN}"
+    fi
     echo -e "${PURPLE}=============================================================${PLAIN}"
-    echo -e "${YELLOW}Server Domain:${PLAIN}  ${DOMAIN}"
-    echo -e "${YELLOW}Server IPv4:${PLAIN}    ${CACHED_IPV4}"
-    [[ "$CACHED_IPV6" != "N/A" ]] && echo -e "${YELLOW}Server IPv6:${PLAIN}    ${CACHED_IPV6}"
-    echo ""
-    echo -e "${GREEN}[1] NaiveProxy (TCP/UDP 443)${PLAIN}"
-    echo -e "  - v2rayN / NekoBox: ${CYAN}${link_nav}${PLAIN}"
-    echo -e "  - Shadowrocket:     ${CYAN}${link_roc}${PLAIN}"
-    echo ""
-    echo -e "${GREEN}[2] Hysteria2 (UDP ${HY2_PORT}${HY2_HOP_START:+ | Hopping: ${HY2_HOP_START}-${HY2_HOP_END}})${PLAIN}"
-    echo -e "  - Universal URI:    ${CYAN}${link_hy2}${PLAIN}"
-    echo ""
-    echo -e "${GREEN}[3] Clash Meta (Mihomo) YAML Snippet:${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}服务器域名:${PLAIN}  ${DOMAIN}"
+        echo -e "${YELLOW}服务器 IPv4:${PLAIN} ${CACHED_IPV4}"
+        [[ "$CACHED_IPV6" != "N/A" ]] && echo -e "${YELLOW}服务器 IPv6:${PLAIN} ${CACHED_IPV6}"
+        echo ""
+        echo -e "${GREEN}[1] NaiveProxy 节点 (TCP/UDP 443)${PLAIN}"
+        echo -e "  - v2rayN / NekoBox 链接: ${CYAN}${link_nav}${PLAIN}"
+        echo -e "  - Shadowrocket 专用链接:  ${CYAN}${link_roc}${PLAIN}"
+        echo ""
+        echo -e "${GREEN}[2] Hysteria2 节点 (UDP ${HY2_PORT}${HY2_HOP_START:+ | 跳跃端口: ${HY2_HOP_START}-${HY2_HOP_END}})${PLAIN}"
+        echo -e "  - 通用订阅链接:           ${CYAN}${link_hy2}${PLAIN}"
+        echo ""
+        echo -e "${GREEN}[3] Clash Meta (Mihomo) YAML 节点配置片段:${PLAIN}"
+    else
+        echo -e "${YELLOW}Server Domain:${PLAIN}  ${DOMAIN}"
+        echo -e "${YELLOW}Server IPv4:${PLAIN}    ${CACHED_IPV4}"
+        [[ "$CACHED_IPV6" != "N/A" ]] && echo -e "${YELLOW}Server IPv6:${PLAIN}    ${CACHED_IPV6}"
+        echo ""
+        echo -e "${GREEN}[1] NaiveProxy (TCP/UDP 443)${PLAIN}"
+        echo -e "  - v2rayN / NekoBox: ${CYAN}${link_nav}${PLAIN}"
+        echo -e "  - Shadowrocket:     ${CYAN}${link_roc}${PLAIN}"
+        echo ""
+        echo -e "${GREEN}[2] Hysteria2 (UDP ${HY2_PORT}${HY2_HOP_START:+ | Hopping: ${HY2_HOP_START}-${HY2_HOP_END}})${PLAIN}"
+        echo -e "  - Universal URI:    ${CYAN}${link_hy2}${PLAIN}"
+        echo ""
+        echo -e "${GREEN}[3] Clash Meta (Mihomo) YAML Snippet:${PLAIN}"
+    fi
     cat <<EOF
   - name: "Hy2_${DOMAIN}"
     type: hysteria2
@@ -831,10 +1162,18 @@ $( [[ -n "$HY2_HOP_START" ]] && echo "    ports: ${HY2_HOP_START}-${HY2_HOP_END}
     skip-cert-verify: false
 EOF
     echo -e "${PURPLE}=============================================================${PLAIN}"
-    echo -e "${YELLOW}QR Code - Shadowrocket (NaiveProxy):${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}二维码 - Shadowrocket (NaiveProxy 协议):${PLAIN}"
+    else
+        echo -e "${YELLOW}QR Code - Shadowrocket (NaiveProxy):${PLAIN}"
+    fi
     qrencode -t ansiutf8 "${link_roc}"
     echo ""
-    echo -e "${YELLOW}QR Code - Hysteria2:${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}二维码 - Hysteria2 协议:${PLAIN}"
+    else
+        echo -e "${YELLOW}QR Code - Hysteria2:${PLAIN}"
+    fi
     qrencode -t ansiutf8 "${link_hy2}"
     echo -e "${PURPLE}=============================================================${PLAIN}"
 }
@@ -842,13 +1181,27 @@ EOF
 # ----------------- Modification Functions -----------------
 
 modify_credentials() {
-    [[ ! -f "$CONFIG_FILE" ]] && echo -e "${RED}Error: Config file not found!${PLAIN}" && return
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}错误: 未找到配置文件！${PLAIN}"
+        else
+            echo -e "${RED}Error: Config file not found!${PLAIN}"
+        fi
+        return
+    fi
     load_existing_config
 
-    echo -e "${YELLOW}--- Modify Credentials (Leave blank to keep current) ---${PLAIN}"
-    read -rp "NaiveProxy Username [current: ${NAIVE_USER}]: " new_n_user
-    read -rp "NaiveProxy Password [current: ${NAIVE_PASS}]: " new_n_pass
-    read -rp "Hysteria2 Password  [current: ${HY2_PASS}]: " new_h_pass
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}--- 修改凭证 (直接回车保留当前配置) ---${PLAIN}"
+        read -rp "NaiveProxy 用户名 [当前: ${NAIVE_USER}]: " new_n_user
+        read -rp "NaiveProxy 密码   [当前: ${NAIVE_PASS}]: " new_n_pass
+        read -rp "Hysteria2  密码   [当前: ${HY2_PASS}]: " new_h_pass
+    else
+        echo -e "${YELLOW}--- Modify Credentials (Leave blank to keep current) ---${PLAIN}"
+        read -rp "NaiveProxy Username [current: ${NAIVE_USER}]: " new_n_user
+        read -rp "NaiveProxy Password [current: ${NAIVE_PASS}]: " new_n_pass
+        read -rp "Hysteria2 Password  [current: ${HY2_PASS}]: " new_h_pass
+    fi
 
     [[ -n "$new_n_user" ]] && NAIVE_USER="$new_n_user"
     [[ -n "$new_n_pass" ]] && NAIVE_PASS="$new_n_pass"
@@ -856,35 +1209,70 @@ modify_credentials() {
 
     generate_config
     systemctl restart sing-box
-    echo -e "${GREEN}Credentials updated and Sing-box restarted!${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${GREEN}凭证已更新，Sing-box 服务已重启！${PLAIN}"
+    else
+        echo -e "${GREEN}Credentials updated and Sing-box restarted!${PLAIN}"
+    fi
 }
 
 modify_hy2_advanced() {
-    [[ ! -f "$CONFIG_FILE" ]] && echo -e "${RED}Error: Config file not found!${PLAIN}" && return
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}错误: 未找到配置文件！${PLAIN}"
+        else
+            echo -e "${RED}Error: Config file not found!${PLAIN}"
+        fi
+        return
+    fi
     load_existing_config
 
-    echo -e "${YELLOW}--- Modify Hysteria2 Masquerade, Port Hopping & Brutal ---${PLAIN}"
-    read -rp "Masquerade URL [current: ${HY2_MASK}]: " new_mask
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}--- 配置 Hysteria2 伪装域名、端口跳跃与 Brutal 限速 ---${PLAIN}"
+        read -rp "伪装网站 URL [当前: ${HY2_MASK}]: " new_mask
+    else
+        echo -e "${YELLOW}--- Modify Hysteria2 Masquerade, Port Hopping & Brutal ---${PLAIN}"
+        read -rp "Masquerade URL [current: ${HY2_MASK}]: " new_mask
+    fi
+
     if [[ -n "$new_mask" ]]; then
         if [[ "$new_mask" =~ ^https?://[a-zA-Z0-9._/-]+$ ]]; then
             HY2_MASK="$new_mask"
         else
-            echo -e "${RED}Invalid URL format! Keeping current masquerade URL.${PLAIN}"
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${RED}URL 格式无效！保留当前伪装站。${PLAIN}"
+            else
+                echo -e "${RED}Invalid URL format! Keeping current masquerade URL.${PLAIN}"
+            fi
         fi
     fi
 
-    read -rp "Enable UDP Port Hopping? [y/N]: " en_hop
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        read -rp "是否启用 UDP 端口跳跃？ [y/N]: " en_hop
+    else
+        read -rp "Enable UDP Port Hopping? [y/N]: " en_hop
+    fi
+
     if [[ "$en_hop" =~ ^[Yy]$ ]]; then
         local hop_s hop_e
-        read -rp "Start Port (1024-65534, e.g. 20000): " hop_s
-        read -rp "End Port (1025-65535, e.g. 50000): " hop_e
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            read -rp "起始端口 (1024-65534, 例如 20000): " hop_s
+            read -rp "结束端口 (1025-65535, 例如 50000): " hop_e
+        else
+            read -rp "Start Port (1024-65534, e.g. 20000): " hop_s
+            read -rp "End Port (1025-65535, e.g. 50000): " hop_e
+        fi
         if validate_port_range "$hop_s" "$hop_e"; then
             HY2_HOP_START="$hop_s"
             HY2_HOP_END="$hop_e"
             printf "HY2_HOP_START=%d\nHY2_HOP_END=%d\n" "$HY2_HOP_START" "$HY2_HOP_END" > "${CONFIG_DIR}/hop.conf"
             chmod 600 "${CONFIG_DIR}/hop.conf"
         else
-            echo -e "${YELLOW}Port hopping configuration skipped due to invalid input.${PLAIN}"
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${YELLOW}端口范围无效，已跳过端口跳跃配置。${PLAIN}"
+            else
+                echo -e "${YELLOW}Port hopping configuration skipped due to invalid input.${PLAIN}"
+            fi
         fi
     else
         HY2_HOP_START=""
@@ -892,16 +1280,30 @@ modify_hy2_advanced() {
         rm -f "${CONFIG_DIR}/hop.conf"
     fi
 
-    read -rp "Configure Brutal Bandwidth limits? (Leave blank for standard BBR) [y/N]: " en_brutal
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        read -rp "是否配置 Brutal 强制带宽速率？(直接回车使用标准 BBR) [y/N]: " en_brutal
+    else
+        read -rp "Configure Brutal Bandwidth limits? (Leave blank for standard BBR) [y/N]: " en_brutal
+    fi
+
     if [[ "$en_brutal" =~ ^[Yy]$ ]]; then
         local up_m down_m
-        read -rp "Server Upload Bandwidth in Mbps (e.g. 100): " up_m
-        read -rp "Server Download Bandwidth in Mbps (e.g. 100): " down_m
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            read -rp "服务器上行带宽 Mbps (例如 100): " up_m
+            read -rp "服务器下行带宽 Mbps (例如 100): " down_m
+        else
+            read -rp "Server Upload Bandwidth in Mbps (e.g. 100): " up_m
+            read -rp "Server Download Bandwidth in Mbps (e.g. 100): " down_m
+        fi
         if [[ "$up_m" =~ ^[0-9]+$ && "$down_m" =~ ^[0-9]+$ ]] && (( up_m > 0 && down_m > 0 )); then
             HY2_UP_MBPS="$up_m"
             HY2_DOWN_MBPS="$down_m"
         else
-            echo -e "${RED}Invalid bandwidth numbers! Using standard BBR.${PLAIN}"
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${RED}带宽数值无效！将继续使用标准 BBR。${PLAIN}"
+            else
+                echo -e "${RED}Invalid bandwidth numbers! Using standard BBR.${PLAIN}"
+            fi
             HY2_UP_MBPS=""
             HY2_DOWN_MBPS=""
         fi
@@ -913,11 +1315,19 @@ modify_hy2_advanced() {
     generate_config
     setup_firewall
     systemctl restart sing-box
-    echo -e "${GREEN}Hysteria2 settings updated and applied!${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${GREEN}Hysteria2 配置已更新并生效！${PLAIN}"
+    else
+        echo -e "${GREEN}Hysteria2 settings updated and applied!${PLAIN}"
+    fi
 }
 
 cleanup_firewall() {
-    echo -e "${YELLOW}Cleaning up firewall rules...${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}正在清理防火墙放行规则...${PLAIN}"
+    else
+        echo -e "${YELLOW}Cleaning up firewall rules...${PLAIN}"
+    fi
     load_existing_config
     local hy2_p="${HY2_PORT:-443}"
 
@@ -978,10 +1388,18 @@ cleanup_firewall() {
 }
 
 uninstall_all() {
-    read -rp "Are you sure you want to completely uninstall Sing-box? [y/N]: " confirm
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        read -rp "确定要彻底卸载 Sing-box 吗？ [y/N]: " confirm
+    else
+        read -rp "Are you sure you want to completely uninstall Sing-box? [y/N]: " confirm
+    fi
     [[ ! "$confirm" =~ ^[Yy]$ ]] && return
 
-    echo -e "${YELLOW}Uninstalling Sing-box and reverting system changes...${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}正在卸载 Sing-box 并还原系统配置...${PLAIN}"
+    else
+        echo -e "${YELLOW}Uninstalling Sing-box and reverting system changes...${PLAIN}"
+    fi
     cleanup_firewall
 
     systemctl stop sing-box 2>/dev/null
@@ -1000,65 +1418,155 @@ uninstall_all() {
 
     # Optional acme.sh cleanup prompt
     if [[ -d "$HOME/.acme.sh" ]]; then
-        echo -e "${YELLOW}Do you want to handle acme.sh SSL certificate tool?${PLAIN}"
-        echo -e " 1. Remove only this domain certificate ($DOMAIN)"
-        echo -e " 2. Completely uninstall acme.sh and remove all renewal cron jobs"
-        echo -e " 3. Keep acme.sh as-is (for other websites)"
-        read -rp "Select option [1-3, default 1]: " acme_clean_opt
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${YELLOW}是否处理 acme.sh SSL 证书管理工具？${PLAIN}"
+            echo -e " 1. 仅移除当前域名的证书 ($DOMAIN)"
+            echo -e " 2. 彻底卸载 acme.sh 并清理所有定时续期任务"
+            echo -e " 3. 保留 acme.sh 原状 (供其他网站使用)"
+            read -rp "请选择操作 [1-3, 默认 1]: " acme_clean_opt
+        else
+            echo -e "${YELLOW}Do you want to handle acme.sh SSL certificate tool?${PLAIN}"
+            echo -e " 1. Remove only this domain certificate ($DOMAIN)"
+            echo -e " 2. Completely uninstall acme.sh and remove all renewal cron jobs"
+            echo -e " 3. Keep acme.sh as-is (for other websites)"
+            read -rp "Select option [1-3, default 1]: " acme_clean_opt
+        fi
+        acme_clean_opt=$(echo "$acme_clean_opt" | tr -d '\r' | tr -d ' ')
         case "$acme_clean_opt" in
             2)
                 "$HOME/.acme.sh/acme.sh" --uninstall >/dev/null 2>&1 || true
                 rm -rf "$HOME/.acme.sh"
-                echo -e "${GREEN}acme.sh and its cron tasks completely removed.${PLAIN}"
+                if [[ "$CURRENT_LANG" == "zh" ]]; then
+                    echo -e "${GREEN}acme.sh 及其定时任务已彻底删除。${PLAIN}"
+                else
+                    echo -e "${GREEN}acme.sh and its cron tasks completely removed.${PLAIN}"
+                fi
                 ;;
             3)
-                echo -e "${CYAN}Preserving acme.sh directory.${PLAIN}"
+                if [[ "$CURRENT_LANG" == "zh" ]]; then
+                    echo -e "${CYAN}保留 acme.sh 目录。${PLAIN}"
+                else
+                    echo -e "${CYAN}Preserving acme.sh directory.${PLAIN}"
+                fi
                 ;;
             *)
                 if [[ -n "$DOMAIN" ]]; then
                     "$HOME/.acme.sh/acme.sh" --remove -d "$DOMAIN" --ecc >/dev/null 2>&1 || true
-                    echo -e "${GREEN}Domain certificate removed from acme.sh.${PLAIN}"
+                    if [[ "$CURRENT_LANG" == "zh" ]]; then
+                        echo -e "${GREEN}当前域名证书已从 acme.sh 中注销。${PLAIN}"
+                    else
+                        echo -e "${GREEN}Domain certificate removed from acme.sh.${PLAIN}"
+                    fi
                 fi
                 ;;
         esac
     fi
 
-    echo -e "${GREEN}Uninstallation completed successfully!${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${GREEN}卸载完成！${PLAIN}"
+    else
+        echo -e "${GREEN}Uninstallation completed successfully!${PLAIN}"
+    fi
     exit 0
 }
 
 # ----------------- Status & Main Menu Loop -----------------
 
 get_vps_status() {
+    load_existing_config
     local os_name kernel_ver bbr_status svc_status warp_status
+    local nav_status hy2_status
     os_name=$(grep -w "PRETTY_NAME" /etc/os-release 2>/dev/null | cut -d '"' -f 2 || uname -s)
     kernel_ver=$(uname -r)
     bbr_status=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "unknown")
 
+    local is_svc_active=0
     if systemctl is-active --quiet sing-box; then
-        svc_status="${GREEN}Running${PLAIN}"
+        is_svc_active=1
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            svc_status="${GREEN}运行中${PLAIN}"
+        else
+            svc_status="${GREEN}Running${PLAIN}"
+        fi
     else
-        svc_status="${RED}Stopped${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            svc_status="${RED}已停止${PLAIN}"
+        else
+            svc_status="${RED}Stopped${PLAIN}"
+        fi
     fi
 
     if [[ -s "$WARP_CONF" ]]; then
         local strat_label
         strat_label=$(jq -r '.domain_strategy // empty' "$WARP_CONF" 2>/dev/null)
-        case "$strat_label" in
-            prefer_ipv6) warp_status="${GREEN}IPv6 Preferred${PLAIN}" ;;
-            prefer_ipv4) warp_status="${GREEN}IPv4 Preferred${PLAIN}" ;;
-            *) warp_status="${GREEN}Auto${PLAIN}" ;;
-        esac
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            case "$strat_label" in
+                prefer_ipv6) warp_status="${GREEN}IPv6 优先${PLAIN}" ;;
+                prefer_ipv4) warp_status="${GREEN}IPv4 优先${PLAIN}" ;;
+                *) warp_status="${GREEN}自适应${PLAIN}" ;;
+            esac
+        else
+            case "$strat_label" in
+                prefer_ipv6) warp_status="${GREEN}IPv6 Preferred${PLAIN}" ;;
+                prefer_ipv4) warp_status="${GREEN}IPv4 Preferred${PLAIN}" ;;
+                *) warp_status="${GREEN}Auto${PLAIN}" ;;
+            esac
+        fi
     else
-        warp_status="${YELLOW}Disabled${PLAIN}"
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            warp_status="${YELLOW}已禁用${PLAIN}"
+        else
+            warp_status="${YELLOW}Disabled${PLAIN}"
+        fi
     fi
 
-    echo -e "${BLUE}---------------- VPS & Service Status ----------------${PLAIN}"
-    echo -e "${CYAN}OS / Kernel:${PLAIN}  ${os_name} (${kernel_ver} | ${ARCH})"
-    echo -e "${CYAN}Congestion:${PLAIN}   ${bbr_status}"
-    echo -e "${CYAN}Public IP:${PLAIN}    ${CACHED_IPV4}"
-    echo -e "${CYAN}Sing-box:${PLAIN}     ${svc_status}   | ${CYAN}WARP:${PLAIN} ${warp_status}"
-    echo -e "${BLUE}------------------------------------------------------${PLAIN}"
+    if [[ -f "$CONFIG_FILE" ]]; then
+        if [[ $is_svc_active -eq 1 ]]; then
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                nav_status="${GREEN}运行中${PLAIN} (端口: 443 | Chromium 内核栈)"
+                hy2_status="${GREEN}运行中${PLAIN} (端口: ${HY2_PORT:-443}${HY2_HOP_START:+ | 跳跃: ${HY2_HOP_START}-${HY2_HOP_END}})"
+            else
+                nav_status="${GREEN}Active${PLAIN} (Port: 443 | Chromium Stack)"
+                hy2_status="${GREEN}Active${PLAIN} (Port: ${HY2_PORT:-443}${HY2_HOP_START:+ | Hop: ${HY2_HOP_START}-${HY2_HOP_END}})"
+            fi
+        else
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                nav_status="${YELLOW}已就绪/未运行${PLAIN} (端口: 443)"
+                hy2_status="${YELLOW}已就绪/未运行${PLAIN} (端口: ${HY2_PORT:-443})"
+            else
+                nav_status="${YELLOW}Ready/Stopped${PLAIN} (Port: 443)"
+                hy2_status="${YELLOW}Ready/Stopped${PLAIN} (Port: ${HY2_PORT:-443})"
+            fi
+        fi
+    else
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            nav_status="${RED}未配置${PLAIN}"
+            hy2_status="${RED}未配置${PLAIN}"
+        else
+            nav_status="${RED}Not Configured${PLAIN}"
+            hy2_status="${RED}Not Configured${PLAIN}"
+        fi
+    fi
+
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${BLUE}---------------- VPS 与服务运行状态 ----------------${PLAIN}"
+        echo -e "${CYAN}操作系统/内核:${PLAIN}   ${os_name} (${kernel_ver} | ${ARCH})"
+        echo -e "${CYAN}拥塞控制算法:${PLAIN}   ${bbr_status}"
+        echo -e "${CYAN}公网 IPv4:${PLAIN}       ${CACHED_IPV4}"
+        echo -e "${CYAN}Sing-box 核心:${PLAIN}  ${svc_status}   | ${CYAN}WARP 状态:${PLAIN} ${warp_status}"
+        echo -e "${CYAN}NaiveProxy 协议:${PLAIN} ${nav_status}"
+        echo -e "${CYAN}Hysteria2  协议:${PLAIN} ${hy2_status}"
+        echo -e "${BLUE}------------------------------------------------------${PLAIN}"
+    else
+        echo -e "${BLUE}---------------- VPS & Service Status ----------------${PLAIN}"
+        echo -e "${CYAN}OS / Kernel:${PLAIN}    ${os_name} (${kernel_ver} | ${ARCH})"
+        echo -e "${CYAN}Congestion:${PLAIN}     ${bbr_status}"
+        echo -e "${CYAN}Public IP:${PLAIN}      ${CACHED_IPV4}"
+        echo -e "${CYAN}Sing-box Core:${PLAIN}  ${svc_status}   | ${CYAN}WARP:${PLAIN} ${warp_status}"
+        echo -e "${CYAN}NaiveProxy:${PLAIN}     ${nav_status}"
+        echo -e "${CYAN}Hysteria2:${PLAIN}      ${hy2_status}"
+        echo -e "${BLUE}------------------------------------------------------${PLAIN}"
+    fi
 }
 
 install_full_flow() {
@@ -1079,31 +1587,71 @@ show_menu() {
     cur_v=$(get_current_version)
 
     echo -e "${PURPLE}#############################################################${PLAIN}"
-    echo -e "${PURPLE}#       Sing-box (NaiveProxy + Hysteria2) Pro Manager       #${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${PURPLE}#       Sing-box (NaiveProxy + Hysteria2) 专业管理脚本      #${PLAIN}"
+    else
+        echo -e "${PURPLE}#       Sing-box (NaiveProxy + Hysteria2) Pro Manager       #${PLAIN}"
+    fi
     echo -e "${PURPLE}#############################################################${PLAIN}"
 
     get_vps_status
 
-    echo -e " Core Version: ${YELLOW}${cur_v}${PLAIN} (Latest Release: ${GREEN}${CACHED_LAT_V}${PLAIN})"
-    echo ""
-    echo -e " ${YELLOW}1.${PLAIN} Install / Reinstall (NaiveProxy + Hysteria2)"
-    echo -e " ${YELLOW}2.${PLAIN} Display Client Links, QR Codes & Clash YAML"
-    echo -e " ${YELLOW}3.${PLAIN} Restart Sing-box Service"
-    echo -e " ${YELLOW}4.${PLAIN} View Real-time Runtime Logs"
-    echo -e " ${YELLOW}5.${PLAIN} Apply BBR & Kernel Network Optimization"
-    echo -e " ${YELLOW}6.${PLAIN} Uninstall Sing-box Completely"
-    echo -e " ${YELLOW}7.${PLAIN} Modify Credentials (Username / Passwords)"
-    echo -e " ${YELLOW}8.${PLAIN} Configure Hysteria2 (Masquerade / Port Hopping / Brutal)"
-    echo -e " ${YELLOW}9.${PLAIN} Manage Cloudflare WARP (Official API Stream/AI Unlock)"
-    echo -e " ${YELLOW}10.${PLAIN} Update Sing-box Core Only (with SHA256 Check)"
-    echo -e " ${YELLOW}0.${PLAIN} Exit"
-    echo ""
-    read -rp "Select an option [0-10]: " choice
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        if [[ "$cur_v" == "Not Installed" ]]; then
+            echo -e " 核心版本: ${YELLOW}未安装${PLAIN} (待安装 NaiveProxy + Hysteria2 | 最新发布: ${GREEN}${CACHED_LAT_V}${PLAIN})"
+        else
+            echo -e " 核心版本: ${YELLOW}${cur_v}${PLAIN} (内置 NaiveProxy + Hysteria2 协议栈 | 最新发布: ${GREEN}${CACHED_LAT_V}${PLAIN})"
+        fi
+        echo ""
+        echo -e " ${YELLOW}1.${PLAIN} 安装 / 重新安装 (NaiveProxy + Hysteria2 双旗舰协议)"
+        echo -e " ${YELLOW}2.${PLAIN} 显示客户端链接、二维码与 Clash YAML 配置"
+        echo -e " ${YELLOW}3.${PLAIN} 重启 Sing-box 服务"
+        echo -e " ${YELLOW}4.${PLAIN} 查看实时运行日志"
+        echo -e " ${YELLOW}5.${PLAIN} 开启 BBR 加速与内核网络优化"
+        echo -e " ${YELLOW}6.${PLAIN} 彻底卸载 Sing-box"
+        echo -e " ${YELLOW}7.${PLAIN} 修改凭据 (用户名 / 密码)"
+        echo -e " ${YELLOW}8.${PLAIN} 配置 Hysteria2 (伪装站 / 端口跳跃 / Brutal限速)"
+        echo -e " ${YELLOW}9.${PLAIN} 管理 Cloudflare WARP (官方API解锁流媒体/AI)"
+        echo -e " ${YELLOW}10.${PLAIN} 仅更新 Sing-box 核心 (同步升级 NaiveProxy 与 Hysteria2)"
+        echo -e " ${YELLOW}11.${PLAIN} 切换语言 / Switch Language (当前: 简体中文)"
+        echo -e " ${YELLOW}0.${PLAIN} 退出"
+        echo ""
+        read -rp "请选择操作 [0-11]: " choice
+    else
+        if [[ "$cur_v" == "Not Installed" ]]; then
+            echo -e " Core Version: ${YELLOW}Not Installed${PLAIN} (NaiveProxy + Hysteria2 | Latest: ${GREEN}${CACHED_LAT_V}${PLAIN})"
+        else
+            echo -e " Core Version: ${YELLOW}${cur_v}${PLAIN} (Built-in NaiveProxy + Hysteria2 | Latest: ${GREEN}${CACHED_LAT_V}${PLAIN})"
+        fi
+        echo ""
+        echo -e " ${YELLOW}1.${PLAIN} Install / Reinstall (NaiveProxy + Hysteria2 Dual Protocols)"
+        echo -e " ${YELLOW}2.${PLAIN} Display Client Links, QR Codes & Clash YAML"
+        echo -e " ${YELLOW}3.${PLAIN} Restart Sing-box Service"
+        echo -e " ${YELLOW}4.${PLAIN} View Real-time Runtime Logs"
+        echo -e " ${YELLOW}5.${PLAIN} Apply BBR & Kernel Network Optimization"
+        echo -e " ${YELLOW}6.${PLAIN} Uninstall Sing-box Completely"
+        echo -e " ${YELLOW}7.${PLAIN} Modify Credentials (Username / Passwords)"
+        echo -e " ${YELLOW}8.${PLAIN} Configure Hysteria2 (Masquerade / Port Hopping / Brutal)"
+        echo -e " ${YELLOW}9.${PLAIN} Manage Cloudflare WARP (Official API Stream/AI Unlock)"
+        echo -e " ${YELLOW}10.${PLAIN} Update Sing-box Core Only (Syncs NaiveProxy & Hysteria2)"
+        echo -e " ${YELLOW}11.${PLAIN} Switch Language / 切换语言 (Current: English)"
+        echo -e " ${YELLOW}0.${PLAIN} Exit"
+        echo ""
+        read -rp "Select an option [0-11]: " choice
+    fi
 
+    choice=$(echo "$choice" | tr -d '\r' | tr -d ' ')
     case "$choice" in
         1) install_full_flow ;;
         2) show_config ;;
-        3) systemctl restart sing-box && echo -e "${GREEN}Service restarted!${PLAIN}" ;;
+        3)
+            systemctl restart sing-box
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${GREEN}服务已重启！${PLAIN}"
+            else
+                echo -e "${GREEN}Service restarted!${PLAIN}"
+            fi
+            ;;
         4) journalctl -u sing-box -n 30 --no-pager ;;
         5) optimize_system ;;
         6) uninstall_all ;;
@@ -1114,18 +1662,37 @@ show_menu() {
             refresh_cache
             if install_singbox "$CACHED_LAT_V"; then
                 systemctl restart sing-box
-                echo -e "${GREEN}Sing-box core updated to ${CACHED_LAT_V} and restarted!${PLAIN}"
+                if [[ "$CURRENT_LANG" == "zh" ]]; then
+                    echo -e "${GREEN}Sing-box 核心已更新至 ${CACHED_LAT_V} 并已重启！${PLAIN}"
+                else
+                    echo -e "${GREEN}Sing-box core updated to ${CACHED_LAT_V} and restarted!${PLAIN}"
+                fi
             fi
             ;;
+        11)
+            switch_language
+            return 0
+            ;;
         0) exit 0 ;;
-        *) echo -e "${RED}Invalid option!${PLAIN}" ;;
+        *)
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                echo -e "${RED}无效选项！${PLAIN}"
+            else
+                echo -e "${RED}Invalid option!${PLAIN}"
+            fi
+            ;;
     esac
 
     echo ""
-    read -rp "Press Enter to return to main menu..."
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        read -rp "按回车键返回主菜单..."
+    else
+        read -rp "Press Enter to return to main menu..."
+    fi
 }
 
 # ----------------- Entrypoint -----------------
+init_lang
 detect_env
 refresh_cache
 while true; do
