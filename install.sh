@@ -475,6 +475,50 @@ verify_domain_dns() {
     return 0
 }
 
+apply_iptables_rule() {
+    local table="$1"
+    local chain="$2"
+    shift 2
+    iptables -t "$table" -C "$chain" "$@" 2>/dev/null || iptables -t "$table" -I "$chain" 1 "$@" 2>/dev/null
+}
+
+apply_ip6tables_rule() {
+    if ! command -v ip6tables >/dev/null 2>&1; then
+        return 0
+    fi
+    local table="$1"
+    local chain="$2"
+    shift 2
+    ip6tables -t "$table" -C "$chain" "$@" 2>/dev/null || ip6tables -t "$table" -I "$chain" 1 "$@" 2>/dev/null
+}
+
+open_port_80() {
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${YELLOW}正在防火墙中强制放行 80 端口 (TCP) 以保障 Let's Encrypt 证书验证...${PLAIN}"
+    else
+        echo -e "${YELLOW}Enforcing Port 80 (TCP) open in firewall for Let's Encrypt issuance...${PLAIN}"
+    fi
+
+    # 1. UFW
+    if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "active"; then
+        ufw allow 80/tcp >/dev/null 2>&1 || true
+    fi
+
+    # 2. Firewalld
+    if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
+        firewall-cmd --add-port=80/tcp >/dev/null 2>&1 || true
+        firewall-cmd --permanent --add-port=80/tcp >/dev/null 2>&1 || true
+    fi
+
+    # 3. Iptables & Ip6tables
+    if command -v iptables >/dev/null 2>&1; then
+        apply_iptables_rule filter INPUT -p tcp --dport 80 -j ACCEPT
+    fi
+    if command -v ip6tables >/dev/null 2>&1; then
+        apply_ip6tables_rule filter INPUT -p tcp --dport 80 -j ACCEPT
+    fi
+}
+
 setup_ssl() {
     if [[ "$CURRENT_LANG" == "zh" ]]; then
         echo -e "${YELLOW}正在配置 SSL 证书...${PLAIN}"
@@ -516,33 +560,62 @@ setup_ssl() {
 
     verify_domain_dns "$DOMAIN" || return 1
 
+    # Force open port 80 and stop port-occupying services before SSL validation
+    open_port_80
     systemctl stop sing-box 2>/dev/null
 
     local acme_bin="$HOME/.acme.sh/acme.sh"
-    if [[ ! -f "$acme_bin" ]]; then
+    if [[ ! -x "$acme_bin" ]]; then
         if [[ "$CURRENT_LANG" == "zh" ]]; then
-            echo -e "${YELLOW}正在安全安装 acme.sh...${PLAIN}"
+            echo -e "${YELLOW}正在安装 acme.sh 证书申请工具...${PLAIN}"
         else
-            echo -e "${YELLOW}Installing acme.sh safely...${PLAIN}"
+            echo -e "${YELLOW}Installing acme.sh certificate tool...${PLAIN}"
         fi
-        local acme_installer
-        acme_installer=$(mktemp)
-        if curl --proto '=https' --tlsv1.2 -fsSL https://get.acme.sh -o "$acme_installer" && [[ -s "$acme_installer" ]]; then
-            sh "$acme_installer" -s email="admin@${DOMAIN}" >/dev/null 2>&1
-            rm -f "$acme_installer"
-        else
-            rm -f "$acme_installer"
-            if [[ "$CURRENT_LANG" == "zh" ]]; then
-                echo -e "${RED}错误: 安全下载 acme.sh 安装脚本失败！${PLAIN}"
-            else
-                echo -e "${RED}Error: Failed to download acme.sh installer securely!${PLAIN}"
+
+        # Primary: Official get.acme.sh via curl pipe
+        curl -fsSL https://get.acme.sh | sh -s email="admin@${DOMAIN}" >/dev/null 2>&1 || true
+
+        # Fallback 1: GitHub raw install-online
+        if [[ ! -x "$acme_bin" ]]; then
+            curl -fsSL https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh -s -- --install-online -m "admin@${DOMAIN}" >/dev/null 2>&1 || true
+        fi
+
+        # Fallback 2: git clone
+        if [[ ! -x "$acme_bin" ]] && command -v git >/dev/null 2>&1; then
+            local acme_git_dir
+            acme_git_dir=$(mktemp -d)
+            if git clone --depth 1 https://github.com/acmesh-official/acme.sh.git "$acme_git_dir" >/dev/null 2>&1; then
+                (cd "$acme_git_dir" && ./acme.sh --install -m "admin@${DOMAIN}" >/dev/null 2>&1)
             fi
-            return 1
+            rm -rf "$acme_git_dir"
         fi
+    fi
+
+    if [[ ! -x "$acme_bin" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${RED}错误: 安装 acme.sh 失败！请检查 VPS 网络连接。${PLAIN}"
+        else
+            echo -e "${RED}Error: Failed to install acme.sh! Please check network connectivity.${PLAIN}"
+        fi
+        return 1
     fi
 
     "$acme_bin" --upgrade --auto-upgrade >/dev/null 2>&1
     "$acme_bin" --set-default-ca --server letsencrypt >/dev/null 2>&1
+
+    local stop_nginx=0 stop_apache=0 stop_caddy=0
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        systemctl stop nginx 2>/dev/null && stop_nginx=1
+    fi
+    if systemctl is-active --quiet apache2 2>/dev/null; then
+        systemctl stop apache2 2>/dev/null && stop_apache=1
+    fi
+    if systemctl is-active --quiet caddy 2>/dev/null; then
+        systemctl stop caddy 2>/dev/null && stop_caddy=1
+    fi
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -k 80/tcp >/dev/null 2>&1 || true
+    fi
 
     if [[ ! -f "$HOME/.acme.sh/${DOMAIN}_ecc/fullchain.cer" && ! -f "$HOME/.acme.sh/${DOMAIN}/fullchain.cer" ]]; then
         if [[ "$CURRENT_LANG" == "zh" ]]; then
@@ -551,6 +624,9 @@ setup_ssl() {
             echo -e "${YELLOW}Issuing Let's Encrypt ECC certificate for ${DOMAIN}...${PLAIN}"
         fi
         if ! "$acme_bin" --issue -d "$DOMAIN" --standalone --keylength ec-256 --force; then
+            [[ $stop_nginx -eq 1 ]] && systemctl start nginx 2>/dev/null || true
+            [[ $stop_apache -eq 1 ]] && systemctl start apache2 2>/dev/null || true
+            [[ $stop_caddy -eq 1 ]] && systemctl start caddy 2>/dev/null || true
             if [[ "$CURRENT_LANG" == "zh" ]]; then
                 echo -e "${RED}SSL 证书申请失败！请确保 80 端口未被占用且已放行，并且 ${DOMAIN} 正确解析到 ${CACHED_IPV4}。${PLAIN}"
             else
@@ -565,6 +641,10 @@ setup_ssl() {
             echo -e "${GREEN}Existing valid certificate found for ${DOMAIN}.${PLAIN}"
         fi
     fi
+
+    [[ $stop_nginx -eq 1 ]] && systemctl start nginx 2>/dev/null || true
+    [[ $stop_apache -eq 1 ]] && systemctl start apache2 2>/dev/null || true
+    [[ $stop_caddy -eq 1 ]] && systemctl start caddy 2>/dev/null || true
 
     mkdir -p "$CERT_DIR"
     "$acme_bin" --install-cert -d "$DOMAIN" --ecc \
@@ -583,23 +663,6 @@ setup_ssl() {
 }
 
 # ----------------- Firewall & Port Hopping -----------------
-
-apply_iptables_rule() {
-    local table="$1"
-    local chain="$2"
-    shift 2
-    iptables -t "$table" -C "$chain" "$@" 2>/dev/null || iptables -t "$table" -I "$chain" 1 "$@" 2>/dev/null
-}
-
-apply_ip6tables_rule() {
-    if ! command -v ip6tables >/dev/null 2>&1; then
-        return 0
-    fi
-    local table="$1"
-    local chain="$2"
-    shift 2
-    ip6tables -t "$table" -C "$chain" "$@" 2>/dev/null || ip6tables -t "$table" -I "$chain" 1 "$@" 2>/dev/null
-}
 
 setup_firewall() {
     if [[ "$CURRENT_LANG" == "zh" ]]; then
@@ -769,9 +832,13 @@ setup_warp() {
                 systemctl restart sing-box
                 if [[ "$CURRENT_LANG" == "zh" ]]; then
                     echo -e "${GREEN}WARP 出站偏好已更新，Sing-box 服务已重启！${PLAIN}"
+                    read -rp "是否立即检测流媒体与 AI 解锁状态？ [Y/n]: " check_now
                 else
                     echo -e "${GREEN}WARP outbound preference updated and Sing-box restarted!${PLAIN}"
+                    read -rp "Test streaming & AI unlock status now? [Y/n]: " check_now
                 fi
+                check_now=$(echo "$check_now" | tr -d '\r' | tr -d ' ')
+                [[ ! "$check_now" =~ ^[Nn]$ ]] && check_media_unlock
                 return 0
                 ;;
             2) rm -f "$WARP_CONF" ;;
@@ -872,9 +939,13 @@ setup_warp() {
     systemctl restart sing-box
     if [[ "$CURRENT_LANG" == "zh" ]]; then
         echo -e "${GREEN}WARP 已成功接入 Sing-box，服务已重启！${PLAIN}"
+        read -rp "是否立即检测流媒体与 AI 解锁状态？ [Y/n]: " check_now
     else
         echo -e "${GREEN}WARP integrated into Sing-box and service restarted!${PLAIN}"
+        read -rp "Test streaming & AI unlock status now? [Y/n]: " check_now
     fi
+    check_now=$(echo "$check_now" | tr -d '\r' | tr -d ' ')
+    [[ ! "$check_now" =~ ^[Nn]$ ]] && check_media_unlock
 }
 
 # ----------------- Configuration Generation (via jq) -----------------
@@ -939,6 +1010,12 @@ generate_config() {
         '{
             log: { level: "info", timestamp: true },
             inbounds: [
+                {
+                    type: "mixed",
+                    tag: "local-in",
+                    listen: "127.0.0.1",
+                    listen_port: 10808
+                },
                 {
                     type: "naive",
                     tag: "naive-in",
@@ -1472,6 +1549,256 @@ uninstall_all() {
     exit 0
 }
 
+# ----------------- Streaming & AI Unlock Check -----------------
+
+test_stream_route() {
+    local route_name="$1"
+    shift
+    local -a proxy_opts=("$@")
+
+    echo -e "${YELLOW}>> 正在检测: ${route_name}...${PLAIN}"
+
+    # 1. IP & Location via Cloudflare Trace
+    local trace_url="https://cloudflare.com/cdn-cgi/trace"
+    if [[ ${#proxy_opts[@]} -gt 0 && -s "$WARP_CONF" ]]; then
+        trace_url="https://chatgpt.com/cdn-cgi/trace"
+    fi
+
+    local trace_out ip_val loc_val colo_val warp_val
+    trace_out=$(curl -s -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --max-time 6 "${proxy_opts[@]}" "$trace_url" 2>/dev/null)
+    ip_val=$(echo "$trace_out" | grep '^ip=' | cut -d= -f2)
+    loc_val=$(echo "$trace_out" | grep '^loc=' | cut -d= -f2)
+    colo_val=$(echo "$trace_out" | grep '^colo=' | cut -d= -f2)
+    warp_val=$(echo "$trace_out" | grep '^warp=' | cut -d= -f2)
+
+    if [[ -z "$ip_val" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "   ${RED}网络连接失败或出口不可达！${PLAIN}"
+        else
+            echo -e "   ${RED}Connection failed or outbound unreachable!${PLAIN}"
+        fi
+        return 1
+    fi
+
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "   出口 IP:     ${CYAN}${ip_val}${PLAIN} (${loc_val:-未知}${colo_val:+ | 节点: ${colo_val}} | WARP: ${warp_val:-off})"
+    else
+        echo -e "   Outbound IP: ${CYAN}${ip_val}${PLAIN} (${loc_val:-Unknown}${colo_val:+ | Colo: ${colo_val}} | WARP: ${warp_val:-off})"
+    fi
+
+    # 2. Netflix Check
+    local nf_res nf_code
+    nf_code=$(curl -sL -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --max-time 7 "${proxy_opts[@]}" "https://www.netflix.com/title/70143836" 2>/dev/null)
+    if [[ "$nf_code" == "200" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            nf_res="${GREEN}完整原生解锁 (支持全部自制与非自制剧)${PLAIN}"
+        else
+            nf_res="${GREEN}Full Unlock (Full Catalog & Non-Originals)${PLAIN}"
+        fi
+    else
+        local nf_orig
+        nf_orig=$(curl -sL -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --max-time 7 "${proxy_opts[@]}" "https://www.netflix.com/title/80018499" 2>/dev/null)
+        if [[ "$nf_orig" == "200" ]]; then
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                nf_res="${YELLOW}仅支持自制剧 (Originals Only)${PLAIN}"
+            else
+                nf_res="${YELLOW}Originals Only${PLAIN}"
+            fi
+        else
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                nf_res="${RED}不支持 / 已被封锁${PLAIN}"
+            else
+                nf_res="${RED}No / Blocked${PLAIN}"
+            fi
+        fi
+    fi
+    echo -e "   Netflix:     ${nf_res}"
+
+    # 3. Disney+ Check
+    local dp_info dp_code dp_url dp_res
+    dp_info=$(curl -sL -o /dev/null -w "%{http_code} %{url_effective}" -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --max-time 7 "${proxy_opts[@]}" "https://www.disneyplus.com/" 2>/dev/null)
+    dp_code=$(echo "$dp_info" | awk '{print $1}')
+    dp_url=$(echo "$dp_info" | awk '{print $2}')
+    if [[ "$dp_url" =~ unavailable ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            dp_res="${YELLOW}所在地区暂未开放服务${PLAIN}"
+        else
+            dp_res="${YELLOW}Unavailable in Region${PLAIN}"
+        fi
+    elif [[ "$dp_code" == "403" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            dp_res="${RED}不支持 (IP 被拒绝访问)${PLAIN}"
+        else
+            dp_res="${RED}No (IP Blocked)${PLAIN}"
+        fi
+    elif [[ "$dp_code" =~ ^(200|301|302)$ ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            dp_res="${GREEN}支持解锁${PLAIN}"
+        else
+            dp_res="${GREEN}Unlocked / Yes${PLAIN}"
+        fi
+    else
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            dp_res="${RED}检测超时或无法访问 (HTTP ${dp_code})${PLAIN}"
+        else
+            dp_res="${RED}Timeout or Failed (HTTP ${dp_code})${PLAIN}"
+        fi
+    fi
+    echo -e "   Disney+:     ${dp_res}"
+
+    # 4. YouTube Premium Check
+    local yt_html yt_country yt_res
+    yt_html=$(curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --max-time 7 "${proxy_opts[@]}" "https://www.youtube.com/premium" 2>/dev/null)
+    yt_country=$(echo "$yt_html" | grep -o '"countryCode":"[^"]*"' | head -n1 | cut -d'"' -f4)
+    if [[ -n "$yt_country" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            yt_res="${GREEN}支持解锁 (地区: ${yt_country})${PLAIN}"
+        else
+            yt_res="${GREEN}Unlocked / Yes (Region: ${yt_country})${PLAIN}"
+        fi
+    else
+        if echo "$yt_html" | grep -qi "Premium is not available"; then
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                yt_res="${YELLOW}该地区未开放 Premium${PLAIN}"
+            else
+                yt_res="${YELLOW}Premium Not Available in Region${PLAIN}"
+            fi
+        else
+            if [[ "$CURRENT_LANG" == "zh" ]]; then
+                yt_res="${RED}检测超时或受限${PLAIN}"
+            else
+                yt_res="${RED}Timeout or Restricted${PLAIN}"
+            fi
+        fi
+    fi
+    echo -e "   YouTube:     ${yt_res}"
+
+    # 5. OpenAI / ChatGPT Check
+    local ai_web_code ai_ios_status ai_res
+    ai_web_code=$(curl -sL -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --max-time 7 "${proxy_opts[@]}" "https://chatgpt.com" 2>/dev/null)
+    ai_ios_status=$(curl -s -A "Mozilla/5.0" --max-time 6 "${proxy_opts[@]}" "https://ios.chat.openai.com/public-api/mobile/server_status/v1" 2>/dev/null | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+    if [[ "$ai_web_code" =~ ^(200|307|308)$ && "$ai_ios_status" == "normal" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            ai_res="${GREEN}全面解锁 (网页端与 App 端)${PLAIN}"
+        else
+            ai_res="${GREEN}Full Unlock (Web & App)${PLAIN}"
+        fi
+    elif [[ "$ai_ios_status" == "normal" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            ai_res="${YELLOW}仅 App / API 端解锁 (网页端受限: HTTP ${ai_web_code})${PLAIN}"
+        else
+            ai_res="${YELLOW}App & API Only (Web Blocked: HTTP ${ai_web_code})${PLAIN}"
+        fi
+    elif [[ "$ai_web_code" == "403" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            ai_res="${RED}不支持 / 已被 Cloudflare 拦截封禁${PLAIN}"
+        else
+            ai_res="${RED}No / Blocked by Cloudflare${PLAIN}"
+        fi
+    else
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            ai_res="${RED}检测超时或无法访问 (HTTP ${ai_web_code})${PLAIN}"
+        else
+            ai_res="${RED}Timeout or Failed (HTTP ${ai_web_code})${PLAIN}"
+        fi
+    fi
+    echo -e "   OpenAI:      ${ai_res}"
+
+    # 6. Claude AI Check
+    local claude_code claude_res
+    claude_code=$(curl -sL -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" --max-time 7 "${proxy_opts[@]}" "https://claude.ai/login" 2>/dev/null)
+    if [[ "$claude_code" =~ ^(200|301|302|307|308)$ ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            claude_res="${GREEN}支持解锁${PLAIN}"
+        else
+            claude_res="${GREEN}Unlocked / Yes${PLAIN}"
+        fi
+    elif [[ "$claude_code" == "403" ]]; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            claude_res="${RED}不支持 / 已被 Cloudflare 拦截封禁${PLAIN}"
+        else
+            claude_res="${RED}No / Blocked by Cloudflare${PLAIN}"
+        fi
+    else
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            claude_res="${RED}检测超时或无法访问 (HTTP ${claude_code})${PLAIN}"
+        else
+            claude_res="${RED}Timeout or Failed (HTTP ${claude_code})${PLAIN}"
+        fi
+    fi
+    echo -e "   Claude AI:   ${claude_res}"
+}
+
+check_media_unlock() {
+    clear
+    echo -e "${PURPLE}=============================================================${PLAIN}"
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        echo -e "${PURPLE}#               流媒体与 AI 服务解锁状态检测                #${PLAIN}"
+    else
+        echo -e "${PURPLE}#             STREAMING & AI UNLOCK STATUS CHECK            #${PLAIN}"
+    fi
+    echo -e "${PURPLE}=============================================================${PLAIN}"
+
+    # Auto upgrade config if local-in is missing in existing installation
+    if [[ -f "$CONFIG_FILE" ]] && ! grep -q '"local-in"' "$CONFIG_FILE" 2>/dev/null; then
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${YELLOW}检测到现有配置缺少本地回环检测入口，正在自动热更新配置文件...${PLAIN}"
+        else
+            echo -e "${YELLOW}Local loopback inbound not found in existing config, auto-updating...${PLAIN}"
+        fi
+        load_existing_config
+        generate_config
+        systemctl is-active --quiet sing-box && systemctl restart sing-box
+    fi
+
+    # 1. Direct VPS route
+    local direct_label
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        direct_label="[1] VPS 本机原生网络直连出口 (Direct Native IP)"
+    else
+        direct_label="[1] VPS Direct Native Route (Direct Native IP)"
+    fi
+    test_stream_route "$direct_label"
+    echo ""
+
+    # 2. Sing-box route (via 127.0.0.1:10808)
+    if systemctl is-active --quiet sing-box 2>/dev/null; then
+        local warp_status_text=""
+        if [[ -s "$WARP_CONF" ]]; then
+            warp_status_text="[WARP 出站已启用]"
+        else
+            warp_status_text="[默认直连出站]"
+        fi
+        local singbox_label
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            singbox_label="[2] Sing-box 代理路由出口 (端口 10808 ${warp_status_text})"
+        else
+            singbox_label="[2] Sing-box Proxy Route (Port 10808 ${warp_status_text})"
+        fi
+        test_stream_route "$singbox_label" -x "socks5h://127.0.0.1:10808"
+        echo ""
+    else
+        if [[ "$CURRENT_LANG" == "zh" ]]; then
+            echo -e "${YELLOW}[2] Sing-box 服务未运行，跳过代理路由出口检测。${PLAIN}"
+        else
+            echo -e "${YELLOW}[2] Sing-box service not active, skipping proxy route check.${PLAIN}"
+        fi
+        echo ""
+    fi
+
+    echo -e "${PURPLE}=============================================================${PLAIN}"
+    local run_third_party
+    if [[ "$CURRENT_LANG" == "zh" ]]; then
+        read -rp "是否运行第三方社区增强脚本 (RegionRestrictionCheck) 测试更多小众平台？ [y/N]: " run_third_party
+    else
+        read -rp "Run 3rd-party community script (RegionRestrictionCheck) for exhaustive tests? [y/N]: " run_third_party
+    fi
+    run_third_party=$(echo "$run_third_party" | tr -d '\r' | tr -d ' ')
+    if [[ "$run_third_party" =~ ^[Yy]$ ]]; then
+        bash <(curl -L -s https://raw.githubusercontent.com/lmc999/RegionRestrictionCheck/main/check.sh)
+    fi
+}
+
 # ----------------- Status & Main Menu Loop -----------------
 
 get_vps_status() {
@@ -1576,6 +1903,7 @@ install_full_flow() {
     check_ports || return 1
     optimize_system
     install_singbox || return 1
+    open_port_80
     setup_ssl || return 1
     generate_config
     setup_firewall
@@ -1614,11 +1942,12 @@ show_menu() {
         echo -e " ${YELLOW}7.${PLAIN} 修改凭据 (用户名 / 密码)"
         echo -e " ${YELLOW}8.${PLAIN} 配置 Hysteria2 (伪装站 / 端口跳跃 / Brutal限速)"
         echo -e " ${YELLOW}9.${PLAIN} 管理 Cloudflare WARP (官方API解锁流媒体/AI)"
-        echo -e " ${YELLOW}10.${PLAIN} 仅更新 Sing-box 核心 (同步升级 NaiveProxy 与 Hysteria2)"
-        echo -e " ${YELLOW}11.${PLAIN} 切换语言 / Switch Language (当前: 简体中文)"
+        echo -e " ${YELLOW}10.${PLAIN} 检测流媒体与 AI 解锁状态 (Netflix / Disney+ / OpenAI / YouTube)"
+        echo -e " ${YELLOW}11.${PLAIN} 仅更新 Sing-box 核心 (同步升级 NaiveProxy 与 Hysteria2)"
+        echo -e " ${YELLOW}12.${PLAIN} 切换语言 / Switch Language (当前: 简体中文)"
         echo -e " ${YELLOW}0.${PLAIN} 退出"
         echo ""
-        read -rp "请选择操作 [0-11]: " choice
+        read -rp "请选择操作 [0-12]: " choice
     else
         if [[ "$cur_v" == "Not Installed" ]]; then
             echo -e " Core Version: ${YELLOW}Not Installed${PLAIN} (NaiveProxy + Hysteria2 | Latest: ${GREEN}${CACHED_LAT_V}${PLAIN})"
@@ -1635,11 +1964,12 @@ show_menu() {
         echo -e " ${YELLOW}7.${PLAIN} Modify Credentials (Username / Passwords)"
         echo -e " ${YELLOW}8.${PLAIN} Configure Hysteria2 (Masquerade / Port Hopping / Brutal)"
         echo -e " ${YELLOW}9.${PLAIN} Manage Cloudflare WARP (Official API Stream/AI Unlock)"
-        echo -e " ${YELLOW}10.${PLAIN} Update Sing-box Core Only (Syncs NaiveProxy & Hysteria2)"
-        echo -e " ${YELLOW}11.${PLAIN} Switch Language / 切换语言 (Current: English)"
+        echo -e " ${YELLOW}10.${PLAIN} Check Streaming & AI Unlock Status (Netflix / Disney+ / OpenAI)"
+        echo -e " ${YELLOW}11.${PLAIN} Update Sing-box Core Only (Syncs NaiveProxy & Hysteria2)"
+        echo -e " ${YELLOW}12.${PLAIN} Switch Language / 切换语言 (Current: English)"
         echo -e " ${YELLOW}0.${PLAIN} Exit"
         echo ""
-        read -rp "Select an option [0-11]: " choice
+        read -rp "Select an option [0-12]: " choice
     fi
 
     choice=$(echo "$choice" | tr -d '\r' | tr -d ' ')
@@ -1660,7 +1990,8 @@ show_menu() {
         7) modify_credentials ;;
         8) modify_hy2_advanced ;;
         9) setup_warp ;;
-        10)
+        10) check_media_unlock ;;
+        11)
             refresh_cache
             if install_singbox "$CACHED_LAT_V"; then
                 systemctl restart sing-box
@@ -1671,7 +2002,7 @@ show_menu() {
                 fi
             fi
             ;;
-        11)
+        12)
             switch_language
             return 0
             ;;

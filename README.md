@@ -95,7 +95,7 @@ nb
 
 | Option | Function | Description |
 | :---: | :--- | :--- |
-| **1** | Install / Reinstall | Full automated installation of NaiveProxy, Hysteria2, certificates, and system tuning |
+| **1** | Install / Reinstall | Full automated installation of NaiveProxy, Hysteria2, port 80 enforcement, SSL, and system tuning |
 | **2** | Display Configurations | Displays Universal import URIs, terminal QR codes, and Clash Meta (Mihomo) YAML blocks |
 | **3** | Restart Service | Smoothly restarts the Sing-box systemd daemon |
 | **4** | View Live Logs | Streams recent runtime logs (`30 lines`) directly from journalctl |
@@ -104,8 +104,9 @@ nb
 | **7** | Modify Credentials | Update NaiveProxy username/password and Hysteria2 connection password |
 | **8** | Configure Hysteria2 Advanced | Change HTTP masquerade site, configure UDP port hopping ranges, and set Brutal bandwidth limits |
 | **9** | Manage Cloudflare WARP | Register official API account, toggle outbound IP preference (IPv6/IPv4/Auto), or remove WARP |
-| **10** | Update Sing-box Core Only | Fetch and verify latest Sing-box core (syncs built-in NaiveProxy & Hysteria2 stacks) |
-| **11** | Switch Language | Toggle interface language between English and Simplified Chinese (persisted) |
+| **10** | Check Streaming & AI Unlock | Dual-route verification (Direct vs. WARP) for Netflix, Disney+, YouTube, OpenAI, and Claude |
+| **11** | Update Sing-box Core Only | Fetch and verify latest Sing-box core (syncs built-in NaiveProxy & Hysteria2 stacks) |
+| **12** | Switch Language | Toggle interface language between English and Simplified Chinese (persisted) |
 | **0** | Exit | Exit the management script |
 
 ---
