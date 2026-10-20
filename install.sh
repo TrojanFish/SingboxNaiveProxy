@@ -911,7 +911,6 @@ generate_config() {
             tag: "hy2-in",
             listen: "::",
             listen_port: $port,
-            sniff: true,
             users: [{ password: $pass }],
             tls: {
                 enabled: true,
@@ -928,7 +927,7 @@ generate_config() {
         hy2_inbound=$(echo "$hy2_inbound" | jq '. + {ignore_client_bandwidth: true}')
     fi
 
-    # Build Base Configuration
+    # Build Base Configuration (Modern Sing-box 1.11+ / 1.14+ compatible)
     local base_json
     base_json=$(jq -n \
         --arg domain "$DOMAIN" \
@@ -945,7 +944,6 @@ generate_config() {
                     tag: "naive-in",
                     listen: "::",
                     listen_port: 443,
-                    sniff: true,
                     users: [{ username: $n_user, password: $n_pass }],
                     tls: {
                         enabled: true,
@@ -962,6 +960,7 @@ generate_config() {
             ],
             route: {
                 rules: [
+                    { action: "sniff" },
                     { ip_is_private: true, outbound: "block" },
                     { protocol: ["bittorrent"], outbound: "block" }
                 ],
@@ -969,7 +968,7 @@ generate_config() {
             }
         }')
 
-    # Inject WARP Outbound & Comprehensive AI/Streaming Routing Rules if configured
+    # Inject WARP Endpoint & Comprehensive AI/Streaming Routing Rules if configured
     if [[ -s "$WARP_CONF" ]]; then
         local w_priv w_v6 w_resv w_ep w_epport w_strat
         w_priv=$(jq -r '.private_key // empty' "$WARP_CONF")
@@ -987,15 +986,18 @@ generate_config() {
                 --arg ep "$w_ep" \
                 --argjson epport "$w_epport" \
                 --arg strat "$w_strat" \
-                '.outbounds += [{
+                '.endpoints = [{
                     type: "wireguard",
                     tag: "warp-out",
-                    server: $ep,
-                    server_port: $epport,
-                    local_address: ["172.16.0.2/32", $v6],
+                    address: ["172.16.0.2/32", $v6],
                     private_key: $priv,
-                    peer_public_key: "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0T7ncGA5S2NoKLU=",
-                    reserved: $resv,
+                    peers: [{
+                        address: $ep,
+                        port: $epport,
+                        public_key: "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0T7ncGA5S2NoKLU=",
+                        allowed_ips: ["0.0.0.0/0", "::/0"],
+                        reserved: $resv
+                    }],
                     mtu: 1280
                 } + (if $strat != "" then {domain_strategy: $strat} else {} end)] | .route.rules += [{
                     domain_suffix: [
